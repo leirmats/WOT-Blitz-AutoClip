@@ -61,6 +61,31 @@ def _orange_mask(frame):
     hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
     return cv2.inRange(hsv, (5,100,100), (30,255,255))
 
+def _lobby_score(frame):
+    """Detect the actual garage/lobby screen using the supplied grayscale UI reference."""
+    small = cv2.resize(frame,(640,360),interpolation=cv2.INTER_AREA)
+    gray = cv2.cvtColor(small, cv2.COLOR_BGR2GRAY)
+    t = _ref_mask("lobby")
+    # Reference was captured from a 1444x810 WoT Blitz frame.
+    t = cv2.resize(
+        t,
+        (max(5,int(t.shape[1]*640.0/1444.0)),
+         max(5,int(t.shape[0]*360.0/810.0))),
+        interpolation=cv2.INTER_AREA
+    )
+    if gray.shape[0] < t.shape[0] or gray.shape[1] < t.shape[1]:
+        return 0.0
+    return float(cv2.matchTemplate(gray,t,cv2.TM_CCOEFF_NORMED).max())
+
+def _gameplay_score(frame):
+    """Estimate whether the normal battle HUD/minimap is visible."""
+    small = cv2.resize(frame,(640,360),interpolation=cv2.INTER_AREA)
+    hsv = cv2.cvtColor(small, cv2.COLOR_BGR2HSV)
+    green = cv2.inRange(hsv,(35,70,70),(95,255,255))
+    # The minimap occupies the lower-left corner during actual gameplay.
+    roi = green[int(.70*360):int(.99*360),0:int(.28*640)]
+    return float((roi > 0).mean())
+
 def _countdown_score(frame):
     # The reference is the actual "Battle starts in 3" text supplied from the user's screenshot.
     mask = _green_mask(cv2.resize(frame,(640,360),interpolation=cv2.INTER_AREA))
@@ -68,17 +93,6 @@ def _countdown_score(frame):
     scale = 640.0 / 1444.0
     t = cv2.resize(t,(max(5,int(t.shape[1]*scale)),max(5,int(t.shape[0]*scale))),interpolation=cv2.INTER_NEAREST)
     roi = mask[int(.28*360):int(.68*360),int(.35*640):int(.65*640)]
-    if roi.shape[0] < t.shape[0] or roi.shape[1] < t.shape[1]:
-        return 0.0
-    return float(cv2.matchTemplate(roi,t,cv2.TM_CCOEFF_NORMED).max())
-
-def _lobby_score(frame):
-    small = cv2.resize(frame,(640,360),interpolation=cv2.INTER_AREA)
-    mask = _orange_mask(small)
-    t = _ref_mask("lobby")
-    scale = 640.0 / 1427.0
-    t = cv2.resize(t,(max(5,int(t.shape[1]*scale)),max(5,int(t.shape[0]*scale))),interpolation=cv2.INTER_NEAREST)
-    roi = mask[0:int(.25*360),int(.35*640):int(.75*640)]
     if roi.shape[0] < t.shape[0] or roi.shape[1] < t.shape[1]:
         return 0.0
     return float(cv2.matchTemplate(roi,t,cv2.TM_CCOEFF_NORMED).max())
@@ -109,14 +123,36 @@ def _refine_lobby(path, candidate, fps):
     for idx in range(first,last+1):
         ok,frame=cap.read()
         if not ok: break
-        if _lobby_score(frame)>=0.70:
+        if _lobby_score(frame)>=0.72:
             found=idx/fps
             break
     cap.release()
     return found
 
+def _find_gameplay_start(path, after, before, fps):
+    """Find the first sustained gameplay HUD after a lobby/loading section."""
+    cap=cv2.VideoCapture(path)
+    n=int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
+    first=max(0,int(after*fps))
+    last=min(n-1,int(before*fps)) if before is not None else n-1
+    cap.set(cv2.CAP_PROP_POS_FRAMES,first)
+    candidate=None
+    run=0
+    for idx in range(first,last+1):
+        ok,frame=cap.read()
+        if not ok: break
+        if _gameplay_score(frame)>=0.003:
+            run += 1
+            if run >= max(3,int(fps*0.75)):
+                candidate=(idx-run+1)/fps
+                break
+        else:
+            run=0
+    cap.release()
+    return candidate
+
 def detect_battles(path, progress):
-    """Use the exact countdown and lobby UI references as battle boundaries."""
+    """Detect countdown starts, then use lobby -> gameplay transitions as a fallback for later battles."""
     cap=cv2.VideoCapture(path)
     if not cap.isOpened():
         raise RuntimeError("Kunne ikke åpne videoen.")
@@ -136,10 +172,14 @@ def detect_battles(path, progress):
             t=i/fps
             cs=_countdown_score(frame)
             if cs>=0.60 and t-last_start>8:
-                starts.append(t); last_start=t
+                starts.append(t)
+                last_start=t
+
             ls=_lobby_score(frame)
-            if ls>=0.70 and t-last_lobby>3:
-                lobbies.append(t); last_lobby=t
+            if ls>=0.72 and t-last_lobby>3:
+                lobbies.append(t)
+                last_lobby=t
+
             progress(min(70,70*t/dur if dur else 0))
         i+=1
     cap.release()
@@ -156,23 +196,45 @@ def detect_battles(path, progress):
         if exact is not None and (not exact_lobbies or exact-exact_lobbies[-1]>3):
             exact_lobbies.append(exact)
 
-    if not exact_starts:
+    # If the next battle has no visible "Battle starts in 3" (as in some
+    # recordings), recover it from the transition from lobby/loading to
+    # the actual battle HUD. Countdown detection still wins whenever present.
+    fallback_starts=[]
+    search_points=exact_lobbies[:]
+    for lp in search_points:
+        before=next((s for s in exact_starts if s>lp+1), dur)
+        gp=_find_gameplay_start(path,lp+1.0,before-0.5,fps)
+        if gp is not None:
+            fallback_starts.append(gp)
+
+    all_starts=sorted(exact_starts + fallback_starts)
+    merged_starts=[]
+    for s in all_starts:
+        if not merged_starts or s-merged_starts[-1]>8:
+            merged_starts.append(s)
+
+    if not merged_starts:
         return []
 
     kept=[]
-    for idx,start in enumerate(exact_starts):
-        next_start=exact_starts[idx+1] if idx+1<len(exact_starts) else dur
-        after=[t for t in exact_lobbies if start+15<t<next_start]
+    for idx,start in enumerate(merged_starts):
+        next_start=merged_starts[idx+1] if idx+1<len(merged_starts) else dur
+
+        # End a battle at the first real lobby/garage after at least 30 seconds.
+        # This keeps the complete result screen but removes the lobby/loading
+        # before the next battle.
+        after=[t for t in exact_lobbies if start+30<t<next_start]
         if after:
             end=after[0]
-        elif idx+1<len(exact_starts):
-            # If no lobby was recorded, don't eat into the next countdown.
+        elif idx+1<len(merged_starts):
             end=max(start,next_start-0.1)
         else:
             end=dur
+
         if end>start:
             kept.append((start,end))
     return kept
+
 
 
 class App:
