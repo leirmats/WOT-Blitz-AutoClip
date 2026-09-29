@@ -36,7 +36,7 @@ def detect_battles(path, progress):
             rr=frame[int(h*.20):int(h*.85),int(w*.15):int(w*.85)]
             hsv=cv2.cvtColor(rr,cv2.COLOR_BGR2HSV)
             blue=cv2.inRange(hsv,(85,80,60),(125,255,255))
-            result_on=(cv2.countNonZero(blue)/float(blue.size))>.050
+            result_on=(cv2.countNonZero(blue)/float(blue.size))>.200
             samples.append((t,battle_on,result_on))
             progress(min(75,75*t/dur if dur else 0))
         i+=1
@@ -59,7 +59,7 @@ def detect_battles(path, progress):
 
     kept=[]
     for idx,(battle_start,battle_end) in enumerate(battle_runs):
-        start=0.0 if battle_start<=10.0 else max(0.0,battle_start-1.0)
+        start=max(0.0,battle_start-1.0)
         next_battle=battle_runs[idx+1][0] if idx+1<len(battle_runs) else dur
         search_from=max(0.0,battle_end-2.0)
         search_to=min(next_battle,dur)
@@ -72,7 +72,7 @@ def detect_battles(path, progress):
             if result_on:
                 if rs is None: rs=t
                 rl=t
-            elif rs is not None and rl is not None and t-rl>=2.0:
+            elif rs is not None and rl is not None and t-rl>=3.0:
                 if rl-rs>=1.0: result_runs.append((rs,rl))
                 rs=None; rl=None
         if rs is not None and rl is not None and rl-rs>=1.0:
