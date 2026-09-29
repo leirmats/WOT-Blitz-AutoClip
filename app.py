@@ -13,6 +13,56 @@ def find_ffmpeg():
     p=Path(__file__).resolve().parent/"ffmpeg.exe"
     return str(p) if p.exists() else shutil.which("ffmpeg")
 
+def find_result_end(path, search_start, dur):
+    """Find the end of the post-battle result/score screen.
+
+    The result screen has a characteristic dark translucent centre panel with
+    a dense table of horizontal/vertical edges. We look for that visual state
+    after the battle, then wait until it has disappeared. A short visual gap
+    is tolerated because the result UI can animate between states.
+    """
+    cap=cv2.VideoCapture(path)
+    if not cap.isOpened():
+        return min(dur, search_start+10)
+    fps=cap.get(cv2.CAP_PROP_FPS) or 30
+    step=max(1, round(fps*0.5))  # sample every ~0.5 s
+    cap.set(cv2.CAP_PROP_POS_MSEC, max(0, search_start-1.0)*1000)
+    frame_index=int(max(0, search_start-1.0)*fps)
+    found=False
+    last_result=None
+    gap_limit=2.5
+    end_search=min(dur, search_start+35.0)
+
+    while frame_index < int(end_search*fps):
+        ok,frame=cap.read()
+        if not ok: break
+        if frame_index % step == 0:
+            h,w=frame.shape[:2]
+            roi=frame[int(h*.24):int(h*.86),int(w*.28):int(w*.72)]
+            gray=cv2.cvtColor(roi,cv2.COLOR_BGR2GRAY)
+            edge=cv2.countNonZero(cv2.Canny(gray,80,160))/float(gray.size)
+            mean=float(gray.mean())
+            dark=float((gray<70).mean())
+            # Characteristic result/score panel. Thresholds are deliberately
+            # broad enough to cover both Victory and Defeat result screens.
+            candidate=(.012 < edge < .080 and .35 < dark < .85 and 30 < mean < 100)
+            t=frame_index/fps
+            if candidate:
+                found=True
+                last_result=t
+            elif found and last_result is not None and t-last_result >= gap_limit:
+                end=min(dur,last_result+2.0)
+                cap.release()
+                return end
+        frame_index+=1
+
+    cap.release()
+    if found and last_result is not None:
+        return min(dur,last_result+2.0)
+    # Safe fallback when no result screen is detected (for example if the
+    # recording ends immediately after the battle).
+    return min(dur,search_start+10.0)
+
 def detect_battles(path, progress):
     cap=cv2.VideoCapture(path)
     if not cap.isOpened(): raise RuntimeError("Kunne ikke åpne videoen.")
@@ -36,7 +86,7 @@ def detect_battles(path, progress):
                 if not active: start=max(0,t-1); active=True
                 last=t
             elif active and last is not None and t-last>=4:
-                end=min(dur,last+20)
+                end=find_result_end(path,last,dur)
                 if end-start>=20: raw.append((start,end))
                 active=False; start=last=None
             progress(min(80,80*t/dur if dur else 0))
