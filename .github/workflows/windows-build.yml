@@ -17,7 +17,7 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force build_tools | Out-Null
-          Invoke-WebRequest -Uri "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-lgpl.zip" -OutFile build_tools/ffmpeg.zip
+          Invoke-WebRequest -Uri "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip" -OutFile build_tools/ffmpeg.zip
           Expand-Archive -Force build_tools/ffmpeg.zip build_tools/ffmpeg_extract
           $f = Get-ChildItem -Recurse build_tools/ffmpeg_extract -Filter ffmpeg.exe | Select-Object -First 1
           Copy-Item $f.FullName build_tools/ffmpeg.exe
