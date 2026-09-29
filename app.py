@@ -93,7 +93,7 @@ def _refine_start(path, candidate, fps):
     for idx in range(first,last+1):
         ok,frame=cap.read()
         if not ok: break
-        if _countdown_score(frame)>=0.70:
+        if _countdown_score(frame)>=0.60:
             found=idx/fps
             break
     cap.release()
@@ -135,7 +135,7 @@ def detect_battles(path, progress):
         if i%step==0:
             t=i/fps
             cs=_countdown_score(frame)
-            if cs>=0.70 and t-last_start>8:
+            if cs>=0.60 and t-last_start>8:
                 starts.append(t); last_start=t
             ls=_lobby_score(frame)
             if ls>=0.70 and t-last_lobby>3:
