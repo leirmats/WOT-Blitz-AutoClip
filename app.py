@@ -1,4 +1,4 @@
-import os, threading, subprocess, shutil
+import os, threading, subprocess, shutil, tempfile
 from pathlib import Path
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
@@ -13,93 +13,74 @@ def find_ffmpeg():
     p=Path(__file__).resolve().parent/"ffmpeg.exe"
     return str(p) if p.exists() else shutil.which("ffmpeg")
 
-def find_result_end(path, search_start, dur):
-    """Find the end of the post-battle result/score screen.
-
-    The result screen has a characteristic dark translucent centre panel with
-    a dense table of horizontal/vertical edges. We look for that visual state
-    after the battle, then wait until it has disappeared. A short visual gap
-    is tolerated because the result UI can animate between states.
-    """
+def detect_battles(path, progress):
+    """Detect battle + result sections and return sections to keep."""
     cap=cv2.VideoCapture(path)
     if not cap.isOpened():
-        return min(dur, search_start+10)
+        raise RuntimeError("Kunne ikke åpne videoen.")
     fps=cap.get(cv2.CAP_PROP_FPS) or 30
-    step=max(1, round(fps*0.5))  # sample every ~0.5 s
-    cap.set(cv2.CAP_PROP_POS_MSEC, max(0, search_start-1.0)*1000)
-    frame_index=int(max(0, search_start-1.0)*fps)
-    found=False
-    last_result=None
-    gap_limit=2.5
-    end_search=min(dur, search_start+35.0)
-
-    while frame_index < int(end_search*fps):
-        ok,frame=cap.read()
-        if not ok: break
-        if frame_index % step == 0:
-            h,w=frame.shape[:2]
-            roi=frame[int(h*.24):int(h*.86),int(w*.28):int(w*.72)]
-            gray=cv2.cvtColor(roi,cv2.COLOR_BGR2GRAY)
-            edge=cv2.countNonZero(cv2.Canny(gray,80,160))/float(gray.size)
-            mean=float(gray.mean())
-            dark=float((gray<70).mean())
-            # Characteristic result/score panel. Thresholds are deliberately
-            # broad enough to cover both Victory and Defeat result screens.
-            candidate=(.012 < edge < .080 and .35 < dark < .85 and 30 < mean < 100)
-            t=frame_index/fps
-            if candidate:
-                found=True
-                last_result=t
-            elif found and last_result is not None and t-last_result >= gap_limit:
-                end=min(dur,last_result+2.0)
-                cap.release()
-                return end
-        frame_index+=1
-
-    cap.release()
-    if found and last_result is not None:
-        return min(dur,last_result+2.0)
-    # Safe fallback when no result screen is detected (for example if the
-    # recording ends immediately after the battle).
-    return min(dur,search_start+10.0)
-
-def detect_battles(path, progress):
-    cap=cv2.VideoCapture(path)
-    if not cap.isOpened(): raise RuntimeError("Kunne ikke åpne videoen.")
-    fps=cap.get(cv2.CAP_PROP_FPS) or 30
-    n=int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0); dur=n/fps if n else 0
-    step=max(1,round(fps)); active=False; start=None; last=None; raw=[]
+    n=int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
+    dur=n/fps if n else 0
+    step=max(1,round(fps*0.5))
+    samples=[]
     i=0
     while i<n:
         ok,frame=cap.read()
         if not ok: break
         if i%step==0:
             t=i/fps; h,w=frame.shape[:2]
-            roi=frame[int(h*.125):int(h*.215),int(w*.35):int(w*.65)]
-            hsv=cv2.cvtColor(roi,cv2.COLOR_BGR2HSV)
-            g=cv2.inRange(hsv,(35,70,50),(95,255,255))
-            r=cv2.inRange(hsv,(0,70,50),(12,255,255))+cv2.inRange(hsv,(165,70,50),(180,255,255))
-            color=(cv2.countNonZero(g)+cv2.countNonZero(r))/float(roi.shape[0]*roi.shape[1])
-            edge=cv2.countNonZero(cv2.Canny(cv2.cvtColor(roi,cv2.COLOR_BGR2GRAY),80,160))/float(roi.shape[0]*roi.shape[1])
-            on=color>.015 and edge>.045
-            if on:
-                if not active: start=max(0,t-1); active=True
-                last=t
-            elif active and last is not None and t-last>=4:
-                end=find_result_end(path,last,dur)
-                if end-start>=20: raw.append((start,end))
-                active=False; start=last=None
-            progress(min(80,80*t/dur if dur else 0))
+            mini=frame[int(h*.62):int(h*.98),:int(w*.25)]
+            gray=cv2.cvtColor(mini,cv2.COLOR_BGR2GRAY)
+            battle_edge=cv2.countNonZero(cv2.Canny(gray,80,160))/float(gray.size)
+            battle_on=battle_edge>.050
+            rr=frame[int(h*.20):int(h*.85),int(w*.15):int(w*.85)]
+            hsv=cv2.cvtColor(rr,cv2.COLOR_BGR2HSV)
+            blue=cv2.inRange(hsv,(85,80,60),(125,255,255))
+            result_on=(cv2.countNonZero(blue)/float(blue.size))>.050
+            samples.append((t,battle_on,result_on))
+            progress(min(75,75*t/dur if dur else 0))
         i+=1
-    if active and last is not None:
-        end=min(dur,last+20)
-        if end-start>=20: raw.append((start,end))
     cap.release()
-    merged=[]
-    for a,b in raw:
-        if merged and a-merged[-1][1]<=4: merged[-1]=(merged[-1][0],max(merged[-1][1],b))
-        else: merged.append((a,b))
-    return merged
+    if not samples: return []
+
+    # Require sustained minimap detection so garage/loading flicker cannot
+    # split a real battle into multiple clips.
+    battle_runs=[]; current=None; last_on=None
+    for t,battle_on,_ in samples:
+        if battle_on:
+            if current is None: current=t
+            last_on=t
+        elif current is not None and last_on is not None and t-last_on>=3.0:
+            if last_on-current>=5.0: battle_runs.append((current,last_on))
+            current=None; last_on=None
+    if current is not None and last_on is not None and last_on-current>=5.0:
+        battle_runs.append((current,last_on))
+    if not battle_runs: return []
+
+    kept=[]
+    for idx,(battle_start,battle_end) in enumerate(battle_runs):
+        start=0.0 if battle_start<=10.0 else max(0.0,battle_start-1.0)
+        next_battle=battle_runs[idx+1][0] if idx+1<len(battle_runs) else dur
+        search_from=max(0.0,battle_end-2.0)
+        search_to=min(next_battle,dur)
+
+        # Search only after a battle has ended. This prevents blue UI inside
+        # normal gameplay from being mistaken for the result screen.
+        result_runs=[]; rs=None; rl=None
+        for t,_,result_on in samples:
+            if t<search_from or t>search_to: continue
+            if result_on:
+                if rs is None: rs=t
+                rl=t
+            elif rs is not None and rl is not None and t-rl>=2.0:
+                if rl-rs>=1.0: result_runs.append((rs,rl))
+                rs=None; rl=None
+        if rs is not None and rl is not None and rl-rs>=1.0:
+            result_runs.append((rs,rl))
+
+        end=min(dur,result_runs[-1][1]+2.0) if result_runs else min(dur,battle_end+10.0)
+        if end>start: kept.append((start,end))
+    return kept
 
 class App:
     def __init__(self,root):
@@ -160,27 +141,65 @@ class App:
         self.running=True; self.start.configure(state="disabled"); self.bar["value"]=0
         threading.Thread(target=self.process,daemon=True).start()
     def process(self):
+        temp_dir=None
         try:
             ff=find_ffmpeg()
             if not ff: raise RuntimeError("FFmpeg mangler i programmet.")
             self.set_status("Analyserer video…"); self.msg("Starter analyse.")
             segs=detect_battles(self.video,self.set_progress)
             if not segs: raise RuntimeError("Fant ingen sikre kampsekvenser.")
+
             out=Path(self.out.get()).expanduser(); out.mkdir(parents=True,exist_ok=True)
             base=Path(self.name.get()).name
-            if Path(base).suffix.lower()!=".mp4":base+=".mp4"
-            outs=[out/base] if len(segs)==1 else [out/f"{Path(base).stem}_kamp_{i:02d}.mp4" for i in range(1,len(segs)+1)]
-            for i,((a,b),dst) in enumerate(zip(segs,outs),1):
-                self.set_status(f"Klipper kamp {i}/{len(segs)}…"); self.msg(f"Kamp {i}: {a:.1f}s → {b:.1f}s")
-                cmd=[ff,"-y","-ss",f"{a:.3f}","-i",self.video,"-t",f"{b-a:.3f}","-map","0","-c","copy","-avoid_negative_ts","make_zero",str(dst)]
+            if Path(base).suffix.lower()!=".mp4": base+=".mp4"
+            dst=out/base
+
+            # Extract each battle/result section, then concatenate them into
+            # ONE final video. Lobby, queue and loading between battles vanish.
+            if len(segs)==1:
+                a,b=segs[0]
+                self.set_status("Klipper kamp 1/1…"); self.msg(f"Kamp 1: {a:.1f}s → {b:.1f}s")
+                cmd=[ff,"-y","-ss",f"{a:.3f}","-i",self.video,"-t",f"{b-a:.3f}",
+                     "-map","0","-c","copy","-avoid_negative_ts","make_zero",str(dst)]
                 r=subprocess.run(cmd,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
                 if r.returncode: raise RuntimeError("FFmpeg feilet:\n"+r.stderr[-1200:])
-                self.set_progress(80+20*i/len(segs))
-            self.set_status(f"Ferdig. {len(outs)} klipp lagret."); self.msg("FERDIG: "+str(out))
-            self.root.after(0,lambda:messagebox.showinfo(APP,f"Ferdig!\n{len(outs)} klipp lagret i:\n{out}"))
+            else:
+                temp_dir=Path(tempfile.mkdtemp(prefix="wot_autoclip_"))
+                parts=[]
+                for i,(a,b) in enumerate(segs,1):
+                    self.set_status(f"Henter kamp {i}/{len(segs)}…")
+                    self.msg(f"Kamp {i}: {a:.1f}s → {b:.1f}s")
+                    part=temp_dir/f"part_{i:02d}.mp4"
+                    cmd=[ff,"-y","-ss",f"{a:.3f}","-i",self.video,"-t",f"{b-a:.3f}",
+                         "-map","0","-c","copy","-avoid_negative_ts","make_zero",str(part)]
+                    r=subprocess.run(cmd,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
+                    if r.returncode: raise RuntimeError("FFmpeg feilet:\n"+r.stderr[-1200:])
+                    parts.append(part)
+                    self.set_progress(75+10*i/len(segs))
+
+                concat_list=temp_dir/"concat.txt"
+                with concat_list.open("w",encoding="utf-8") as f:
+                    for part in parts:
+                        safe=str(part).replace("'","'\\''")
+                        f.write(f"file '{safe}'\n")
+
+                self.set_status("Setter kampene sammen til én video…")
+                self.msg(f"Slår sammen {len(parts)} kampklipp.")
+                cmd=[ff,"-y","-f","concat","-safe","0","-i",str(concat_list),
+                     "-map","0","-c","copy","-movflags","+faststart",str(dst)]
+                r=subprocess.run(cmd,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
+                if r.returncode: raise RuntimeError("FFmpeg kunne ikke sette sammen klippene:\n"+r.stderr[-1600:])
+
+            self.set_progress(100)
+            self.set_status(f"Ferdig. {len(segs)} kamper samlet i én video.")
+            self.msg("FERDIG: "+str(dst))
+            self.root.after(0,lambda:messagebox.showinfo(APP,
+                f"Ferdig!\n{len(segs)} kamper samlet i én video.\n\nLagret i:\n{dst}"))
         except Exception as e:
-            self.set_status("Feil – se loggen."); self.msg("FEIL: "+str(e)); self.root.after(0,lambda:messagebox.showerror(APP,str(e)))
+            self.set_status("Feil – se loggen."); self.msg("FEIL: "+str(e))
+            self.root.after(0,lambda:messagebox.showerror(APP,str(e)))
         finally:
+            if temp_dir: shutil.rmtree(temp_dir,ignore_errors=True)
             self.running=False; self.root.after(0,lambda:self.start.configure(state="normal"))
 
 if __name__=="__main__":
