@@ -36,13 +36,13 @@ def detect_battles(path, progress):
                 if not active: start=max(0,t-1); active=True
                 last=t
             elif active and last is not None and t-last>=4:
-                end=min(dur,last+10)
+                end=min(dur,last+20)
                 if end-start>=20: raw.append((start,end))
                 active=False; start=last=None
             progress(min(80,80*t/dur if dur else 0))
         i+=1
     if active and last is not None:
-        end=min(dur,last+10)
+        end=min(dur,last+20)
         if end-start>=20: raw.append((start,end))
     cap.release()
     merged=[]
