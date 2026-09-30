@@ -30,6 +30,7 @@ def find_ffmpeg():
 REF_B64 = {
     "countdown": "iVBORw0KGgoAAAANSUhEUgAAAKwAAABFCAAAAADyEVJOAAABcUlEQVRo3u2Z4ZKDIAyECXPv/8rfzbTXTrW0RkmCnMmvTg3ZZQ2yaCldQRkUfMemczL98+LnXkPeqSKtnztD9g3nb0TzmkjJyMjIyMjI8I6t/ZaNJGw2bF0Z0bkm+WRxvlWgee39XxSiKcjSyuPh0jYqNDm07pSabN1lTJ8MWdlJPozgdrE1bF1hkdep7KuW6wosSrF7waDloyarhe4dIgZtoO0UTKr4k/U/PdYyUViTFbfkLbIxbwUYoyw758fQNgDXJXnpBea4HE+hrBhlvlorbIjRsBMrE9Jnvm9Za2vLUeuCtKwiCoWNjL7bPjDv00Bihe0DDFcWjq/VXmU5+JyQQLIcOBYMI9vpy2TQAiMQ81JGhpnIliTrRFZSWS+yksom2djGMWg5whCzDf7LSWH0gVHmmGnwSdxKFkLg6jwde8WXHNo+6AWrJ5t0TBvITGQj2NYyEVtbBHyRrOXAE6ee+k65F8cPxkGJ5ZcXDGF+AbiCZkSkUCT8AAAAAElFTkSuQmCC",
     "lobby": "iVBORw0KGgoAAAANSUhEUgAAAJ8AAAAZCAAAAAAKmaP5AAAA9ElEQVRIx+2W0Q6EIAwEGeP///LeSal6Gg0ooA/XB4wa22XaUgnJFCoaZ+4o8TSEd9tf31/fkzZ2iMGNA2J8tboe+pIyqvPDvZPWXch8LlwVOOQmKOqS4lo+DtS2f42U5rU89HdT9DtfKORCaMJPk2dupg2So/r1Z5693rQJ6lzIKj2peqY4BlRAw70s/UvDSrpEQNutxn5LeRfP6lvO0V1U5+ojhkf0nR2oizTDaWI144be8pATRXajuTbjxR5jrxvp47yx1qNyAudCCSuGBpIm+A71eWNk/1yMobPlz7nUPRGnqjeA6gy7cfcBRQloMHJ/7AOEe2Auy2Q6eQAAAABJRU5ErkJggg==",
+    "battle_button": "iVBORw0KGgoAAAANSUhEUgAAAG8AAAAZCAIAAACw3OfrAAAV3ElEQVRo3kVZR5Nd13E+6aaXJw8wSEOASKREEoQA0pRlBRKmJdEK1sKWtJOrXC7bO/8DLyzvtPDKG6+0kqskuUqUpbICKVIUJYICSCISGYPBBEx488INJ/nrc4f0cPjm4b77zu3u8/XXX/fhn/nqcbkxfun44ZMTpsNHmnsthHNWcqaUklIKLhhjHP8UnHPvuXPceeYd855ZIbyQ9Cn+91x4euWOMce5jGO8b7fa7U4HV1Sc4Fco5aV0QnqOb+DbnhsTeW91tbWx5ovSFIWpKqxPDzD0yr1geHX16rDFO//xL16Yc2QL3cqYFILsottgKK4Z65jziWHtN26Pzj/iw+W7fz5rPvP4dKGYi1UkRCOOGTxmmkmPhzln4CNc5+SvwKqVtvASj8ZjNF4khaEs88iXjok19fgP32O3NnGHUSZ7NJHKk/PJqSk9yXInRYnYcOvhhEKcBJeSTGUuUgLhg6UILy6TW9wIREZRACk6FCMRrjMLS5QSkmfJWKV9JhMWJyziTJCjdAejjYHxTFtYyKzbE43x3pYV/LHcCcciWGgFxRNPsCGgTjEfUxSdRqjoLz7DkhR+hBXrirC4cF7YsKvWCeNkwdT9QfzBdnlz5WE0I47tmRbCRErHEfa39Aga9oq2GEtYGQuVACWcdoNCKa12toLvvHKW/GKiGJnEVoxFd+Psv4YrO32RxEyxpGSVj22RiVFkNzmTCL2T1ksH4DFOHjEKHwwjmwmFgKsgLGI3uLACNwvLCDn4qqQ4wyjsJcEaONY294YljmNvCi4qWswrIMYK2OfCtlMm4Kn4RMTYOuwlzLfYExngCwggtBR0l3HXYIYJWzJnED/sDvYRdnk8ikAjmQPGsCCghUfBGBXuyLUZAYE8ZuM4Hkdy0uUdl0dcFLoy+B7yUETMwx2yvsydiqUxFcAbRzE2WAvjyQ7nK4Qd0eaxxjbylhJ2NNp+VBw4uKBG24N5lzUU4lpEbESOITZeO2QxQT/2LGQ6AMKD4QH+gt4AKgAM4mgpCXERkIAT9Jl3kqLJCLmAqZe+YogmICI0eQifiQ9oQfpBHH3EnPKWe+sIIEgCY3APYuSBHFqb/nJXCDcmEwTdgLiTQViNzKMIOloZZlNiSrIVsZSWIVRYbGhtikyoYI6MlGcRtsWaSBhko4HjMCaWTqqk0c2mZlijwfIRG+2Ug03rQhZ6i/xE3gqjae+R91jI24jZSBDhqHKDaeSWgHPShVQkgiIXa8hEBLMQTuQXpRHl6e4beAo2BSMQWLECVoeTlPK7gPOKGUW4jikcWCRBsIlzaUUR1ghsC0sRTa4I/cxSkD0lq1MUTUd8QMnLKHjYvCpECSFTnrYD1ymPEE1kN9ECpQ2+g0te0S9ABc+VhHksc15FshGpNsMGE9rL0hYiiWSUFKgAadaYmFXZnNdRvqY5b2TN+aRnWbFVbKzoYV8hjgBngBf+0wK/IBvAFijxSgzS9mSv0BpB8R55TTAjjBHIsOeUSZQwyL/dTPfEq8COryj7qeZQjjPKRwAgEhzrVkSsPGwMV8RpXhPzkfXIReJLVgOdhTAx2gprtAsMTViDHUQoQA3gAEwEmqU7TSiT3Fl6qJAq3ExEZsM6oRwR2oPDPpQkR25QqjFrsWZSln481i3ONVhNUL4Sv4ikN7WfdfcMHo4+/HD53o2VR6tbQsqZPb3Hju098vRi2u0W7oEdbXs+9AIxBUQRV1hDjwjJylQnnrc6l5EIPF5n3kcWebtbRIPXoVK6cAe2vZK0okbowBH0AWIkug744qVkRR0loM5ZVGz4pnFb7W/gYVTf4G5F4oD2jjgRb2IeZw4I1DoSiELhS8vDt8oxi2NF2Y0ECGyK8BuDz+LA08QcQUwQfxCNMsKppfqONwByRKTHI6Q+lX9rnACADMAP7eJU1J2aY92Dq2/f+8UP3/R921Od/UmrrIq1qzcv/OhGX77+zX946okvPV9cu5DnJWobh/ukBJCwztchQx5wnYpEh3DxOhtZSBbCIqWiIWJidbLTJmBPCEciyitsbAYJRaZLbgH2QKlKZBxU77iufJIAPKYqi0I0vaQ0x1ejKMrzsQ8SCvpFAYNUnI2kOiZIklktYSeTpWmD/K0hikY2wY1EtiOW2kKjTFGxAjmy3QRyRJq8ZmJKdqSLq7WSIE5giceO8hi1LUnjrBErVFCFkGDvRKszw2YWV/94/9Uf/rp/203D/Hj7g5ubBWMvf/nMl584fmv7wau/+NVIxGdOHwN/6+FD1CXp62ygiLmAP6UiEpWOVJmrmRE2BR1nAhCFqPHKCdpwKpJEeYXrxpOPZQePs7RJZRL0unZ/c+UtbtZzMRO1TnQXDoCS1leuRHalNz3Npp9hcp+uqOiqdiNeW4IPSW+W5CRKc8JYvrG6dHluf7t8cGm4dWeiGe0MlW+cmHj8T5hporizZsns+tbl69nkAZaxnYcXi9GKsEUSyIcEMJkdIEl7ShKALgVJyoJqpepq6FpZ5IgFhRJKLFVRnAneYH375tvneVu+8p0Xrl76A4rnK985I3tTc0eflp35U1OvXP5eef7SnTMvvhT1N7zve1MIqpMIvLTWhogBm5IoxtugP2yQii7IjLDdFMRQUkmUh2qNQgYqLMWEaj7B9n6eVawcYben2Nx6p+z3194u/Gx75kW2+Awrd8rVqCx0y80Je5I1TkettkfG+rGuMi+bTB7nWYP5Ias2xvmKVS3Wbbk7q5HfKndQRqdVdoq1X2amiwxh8Sqzt9fGo4kDz7A92XD5QeUGMdLUAbpUyqHtYKcLSKnRIkgakJilpAK1heuQ5VEUWBrS1lgJ2ouk6sz99vULm1X11Iunqwm5cODooZOHes89z9pTTEwU267Ysl/7p3/8z3/77o9/8JOvfO2zemNVaqgCVzogUUKH0HLWKhAIMY8lLCI90QgE6kaiqMB9wteJz0LhCIUctaVScZnLppy+eWfpjTff+/SZzx5eXDC8m5eiUCqZ3s+28d1eb+LI5vbF1aXl8ert5tyBvYda6/dv9ZcuZtWyUZN2gx0+/jQbrd157zdQ1+3JDjMNW0pfeNJKFvsUsdbi6rXNa1evZ3Ipk/dGYyisLBppg9pR4bYoAh+7ms5J26EYEWuSBidCQ/minsoFOnVgXb3d366qthARSQXOENBG0mQsGWjx+KmzjQOz15evf/L00d7Jw1trW67Pl9bvVkamanrf5GE2t3Dx2h+/4hoi7bnxtrFjBoQzUhmRg7ih+HpaNcQRFEKagv5JGsfXGo56jFA0bOCGeuMhSUzFbHl4356JL3S7vSlmtkeF1G6i1Z5kLXvh1z8/+vhTremp5fdGndSkbqVb3QCQGuPflcPfzSZbw2piu69ZMsH67/L1X7Z6h5v+MSY7yFFtUSsyUxgkMtu5PzGdnHpuXws5tWPeu/CwGC1HnWZa5qy0Ta6kNnWTSUXVh4SGuZRfRKuoE1QpHPoiVxQF+iJYjjdaoyKDEtCryCxrV+NicnZ2aVA+eejE/Iknr1w9X/kNLtp/vPiGNtVwvHP86bOfePbrZ1/80+upHY4rS3h3EXWM0Ehok6piVBit63qMJ7vQFBNx0mMECSG8rS/gqSgygodiiOQJetnkKM8NpovtjU0etXqdpo33bVdLBw+dZb5V8dagSBrzE83WYr5zXyRQTWPGc1FtKL0i2CoixXmfuZzZLV6uMj0HEmO8MzATlZtDMzEyjdi3mITEHnuzqYtlvrPJ8rzoD9uozwMe5QnSzOsqqCDgz9Y9vAgkGsSWDz09D028T+Ko08n27Z+angYwEc8ilaiBqspN0m2/8cZ/3x+We46f8Im4+MGH8fVbUjV/+9Y7X/yLc6sPN4eDLcZGshH3ZmawCSBckG5LqmFZybZQrbgSQ5Q6yBZmDKSeQSeH4FFtQrtNfWvQxbWSDvOJkOsh1aGFSEQD42r56vtvvXV+5uDxcy+fmz169sr7V8TUCTZWZ144x3TE4mrh0Nl3Xltt9iQFS7Oq4jCgZFFpUVThfcKsKqAgNUPnzaKJXMzaxIxNc2087lTxQm/y0R9+de3Cay231fRjCUAMShR3WTZYlWk2FEHtU+F2YVJCTtC2hFB6vqv2qEVopsn0ZFuJA73etncVSQgqHxVkEmt20PPNdXrrt+9/93s/b3XY516aWdt69OzpE2tb924/uPOHy9ePPfXcYPXB9sq9ztnj27cAqjBO0KyoiqlD05+cXJib30PYpLpnCJsUupAxoTEnBUqFh+RmXYHqz0BRkKe2g+CON/eePPitxb2sNc0arPjg1uLsAovkrdd/1t8puhPzjz19jHV7e7uzo3ynYbeY2YnKsaxAHBGa+4QPseGogHqYtztVC8w9LA6f/BTAyPRWcvnWANFYv7v3yNzeQ19A7WKmePjqL6fnp9ihg/rH100Z5FDdVOxK4ZBSblc1h2iGek9zKFSkKo706VPHjkUPpX2InhxxREjMYBytr33l3Is/ef3dpEy//cqZ3/z296s3+nE3vnHpctrp/M03vvXq//z63V++rsZ5Q+esGtphP6ZomkjGTo9cuTozsXDm2UW5d26yJ6on93YWUp25PFRwEKoMRQnylxOR16+IuA3NiAFZyW6ny5sJpBFJ42JHv/P6lbd/cWzfBGvp/hs/cuvXGuVKZ3ifN1nbDLfuXplIjZiI2e2rbLCRaM2tTKM06SZs5cbo7u2pzmQzSmUjA5MFnuaNrb6siqQbMzNkvqTM2NkZ37zRmuogL8rbV0zeR1sYOymQR0aQ2IeEJMaXdf4wmjmF4YyPjY/z9vy1YdVqyBMd1iq2GqbMvI9FXBY0bpk4uPi/P/nNG69deXzx9PrSo5Wl4bmXPv/yuZeuXbp58+q92CXf/4/XZuPh337rGzsfvOP66ykSzWo8YRg1dGtibKsjRw7w0088djjOv/nc/md7w0m7jmbZiaje2rqr8PUfQijRdmiVeAX0xplViRaRBimXZapEHMsk5hkvzOiRozZHqKylkmZlsBXo4liSpOA9bsoUooKroRXojpUtdVFEadfwho5bRqTI14RUPZLJUEGhcR06KmvyEY3+QE5AGSooCLy0MU0rqA+iCYOrWw8fihILRd2woD7HPF2aWjyvelcvvX+K9T8922jmm5MKbQkIWmbT82LxaNHP/uVfv3/x7ni60fDS7DnU7czEt+4/eLDCVgbsc0+If/67b+9pmuGDK25rJUPLy8H64kPXXJk9+s76cEt7OTPRmYrc0/sn5uM8JRSgKZbgoro+ijD7EEyGIVzoncPcVME9XfBq5PVQ6kGH5W1fsPGQj0dKV4kQirSDMhUKnaESMc55adDLqSBiaGJlgX/OK7Q94H2Z9/u+GklX2mrAi0FcFXhlxZasdkQxUMUoyod47URc6nFsqlg7UdoEjSyZGuSwD7a5UNnDvoeWn4WaJC2P7uRFdGhfIxXpxvq+JG5xB/uQiXEc57oE3ySPHfmzM2eFM6PB9rA/+uDh+MrtgdlkTx5t/eVnjn3nr78+N9cY3bvEBqsNV0VEM+jW2Lg1fZelVWfyUX+o0gR6FuLI1F14kEOGmkkeOu2POvSAzV2wkrSjYayNVBhpcJfgC2gM4JiIXaVGYDQlRaQqXTJF42ZNnSS8RRspNFKLFAu6wjhSkSSPTUQ1xPhiqALJSeoxcF2LwHg0ZSPdY8TYJDwMrPFhaOfDpodpApN1k1djk3p3msY7G6zmItne3rxw/vwTx08cPXZSL98hJUrjZTEeDrWKt8v78VhPH3vmm3//8gvv7L9+/R4TMXpPNKgHD+058uxJ++DGxqWrUfXIlyMts5EWD1Y2Tn7xq9M+ef1HP5156lOHj31CtZtJN4XFJkLkbBhey9A8hnoYzgVCyaQw0o77MJihmZ31KpxyeJrHkodSSE1KDO0H0o/mPcrQWACU1oBd8Kgs4UKD+kRyUBeldbmgGQZ6RV55C+EWsXonbXilYRziq0KzSMKx0ngM8aqI0dRUEG61yvR1PeK7A8N67FFTFA1AHWTj/MxMtVksPVg70owFHVE4QdNt5IOPwW9QoDsbWx+8lfWmDy4uHDx2iiFHK8vSmI22xxdfs0iRfEOWNFgais5OY/LYl77OPvPi8s9/NjU5u3L3FlpUtTDf67F+FJPCkDwZ6wISTqATCjEFhOAtCXoeABHEBzVsHHkck8AjPPIwVSTt76gdoRjTzTSzjQjVxteCoEJkw7SZahzQzJGAJB0E4iRBlc5SPxtGGD7Iso/TIcxcLM2bd2daIRy+TmtWB5HtjnLCTrHd+UdId04dpk/TiamZ1rUPP9zTcM9PgkuYJsJFW9QCPFKudAnFNBgU42J7LWk2wvCURVzovCiHw2BnJZnq5/5GaT7x8jn50tfQ5qzl0fzMgc0Hd69duq6OHp5LNktUhgTcb1gcpYMibzQTiFDKD+BKVyocT0AR1OYCd45OaVw9OxfhmA1OyOCKqCWJDQ6y3amUINZlleIldxWKhQ2HXypWUaIRE+MSJlq7g5cgtXdlWT32p2ORkAyuHhfSh/UIjO02Z/Un/z9MDMkUxu/ehxEy+umlextLLLpzb+deOni+tSfz6Lfgho5pOGtoCTig4bfVpWMjkaYJ0OMrA45O8UxLJ4cwL5atU8++kH3pr9ggh1H7Jid/8NObfaF0kgCertXt9LcfjrKYlTwBWaTpoHJAJ/lkd+tjhB5USEd9EP8IN+H8gFqNMAZ3BcLHsAhjkhAO3NpIU5alsplk3QZgLenkjyZpZVWNRiM7yn1hmpUThmaWlp7CwlFJDU7HdgWl/yia7OODyTqa7KOkJircPXihgLrATJonI9G+uTy8PFh9uJLv7JU5y0puS6J0PCOq7waFWVLeqI8EEesjpBkEuvEligvirj0vvUpnD2Wf/BQ7/w6NTDcfssHm6qPq1rhoTSdqfWtDNRtRY+LCeLjQXdjY3EhaDXLIsEa7+2irnzVbCKIZmU6nszXo4zHgQIu6HCWVIR6QQpVV+ZGiYn43rvS30rrdoh9VyVimFY/SrEdZTnPocELL2NgW1pcpULGzDciOixzfghQgkgk8zetz0NBk1COCkIP1E+pDFvbxBMF58XFSEDbDX8S0lObdNbOMvrRSl7ftr1Z8TyQpiIlSUO6eeYYDKSIq1GVDBoTzZCRmCzyuRFQAuSIZPni09Nq/27iZ2GHKy6I5vzr0g1LurI6VyFqrlc+zyVtbZlp09GRnbXNzcfHo+++9//jcvuVRG9I3ydK11UcTyezqIB4O870LB67fupO1G+NCD0d5qwUVqXUVTi/8bmoDI2X4MbYfJn5WhgPu5eVlq03NsixMygFxFbE0igm/NIeoJ2esKlFjbCRVOPvg4Szgo0yvD0E+3j67G/33L+u6b4+76/vooMRzgsZj1SmIvXmSvH7h9ebrSxAMgplkoXzU+IZZIeuSrzWC9ZrknCoVQ3WE9KIyPBHgukwv9pMs66Is7F1/weoeRk+jKuFngAAAABJRU5ErkJggg==",
 }
 _REF_CACHE = {}
 
@@ -62,29 +63,15 @@ def _orange_mask(frame):
     return cv2.inRange(hsv, (5,100,100), (30,255,255))
 
 def _lobby_score(frame):
-    """Detect the actual garage/lobby screen using the supplied grayscale UI reference."""
-    small = cv2.resize(frame,(640,360),interpolation=cv2.INTER_AREA)
-    gray = cv2.cvtColor(small, cv2.COLOR_BGR2GRAY)
-    t = _ref_mask("lobby")
-    # Reference was captured from a 1444x810 WoT Blitz frame.
-    t = cv2.resize(
-        t,
-        (max(5,int(t.shape[1]*640.0/1444.0)),
-         max(5,int(t.shape[0]*360.0/810.0))),
-        interpolation=cv2.INTER_AREA
-    )
-    if gray.shape[0] < t.shape[0] or gray.shape[1] < t.shape[1]:
-        return 0.0
-    return float(cv2.matchTemplate(gray,t,cv2.TM_CCOEFF_NORMED).max())
-
-def _gameplay_score(frame):
-    """Estimate whether the normal battle HUD/minimap is visible."""
-    small = cv2.resize(frame,(640,360),interpolation=cv2.INTER_AREA)
-    hsv = cv2.cvtColor(small, cv2.COLOR_BGR2HSV)
-    green = cv2.inRange(hsv,(35,70,70),(95,255,255))
-    # The minimap occupies the lower-left corner during actual gameplay.
-    roi = green[int(.70*360):int(.99*360),0:int(.28*640)]
-    return float((roi > 0).mean())
+    """Detect the real lobby by matching only the orange BATTLE button at top-center."""
+    small=cv2.resize(frame,(640,360),interpolation=cv2.INTER_AREA)
+    gray=cv2.cvtColor(small,cv2.COLOR_BGR2GRAY)
+    t=_ref_mask("battle_button")
+    scale=640.0/1444.0
+    t=cv2.resize(t,(max(5,int(t.shape[1]*scale)),max(5,int(t.shape[0]*scale))),interpolation=cv2.INTER_AREA)
+    roi=gray[int(.02*360):int(.12*360),int(.40*640):int(.60*640)]
+    if roi.shape[0]<t.shape[0] or roi.shape[1]<t.shape[1]: return 0.0
+    return float(cv2.matchTemplate(roi,t,cv2.TM_CCOEFF_NORMED).max())
 
 def _countdown_score(frame):
     # The reference is the actual "Battle starts in 3" text supplied from the user's screenshot.
@@ -114,10 +101,11 @@ def _refine_start(path, candidate, fps):
     return found
 
 def _refine_lobby(path, candidate, fps):
+    """Search backward from a confirmed BATTLE button to its first visible frame."""
     cap=cv2.VideoCapture(path)
     n=int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
-    first=max(0,int((candidate-1.0)*fps))
-    last=min(n-1,int((candidate+0.5)*fps))
+    first=max(0,int((candidate-3.0)*fps))
+    last=min(n-1,int((candidate+0.6)*fps))
     cap.set(cv2.CAP_PROP_POS_FRAMES,first)
     found=None
     for idx in range(first,last+1):
@@ -152,90 +140,70 @@ def _find_gameplay_start(path, after, before, fps):
     return candidate
 
 def detect_battles(path, progress):
-    """Detect countdown starts, then use lobby -> gameplay transitions as a fallback for later battles."""
+    """Use hard anchors: Battle starts in 3 starts a battle; BATTLE ends it."""
     cap=cv2.VideoCapture(path)
-    if not cap.isOpened():
-        raise RuntimeError("Kunne ikke åpne videoen.")
+    if not cap.isOpened(): raise RuntimeError("Kunne ikke åpne videoen.")
     fps=cap.get(cv2.CAP_PROP_FPS) or 30
     n=int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
     dur=n/fps if n else 0
     step=max(1,round(fps*0.35))
-    starts=[]
-    lobbies=[]
-    last_start=-999
-    last_lobby=-999
+    countdowns=[]; lobbies=[]; last_start=-999; last_lobby=-999
     i=0
     while i<n:
         ok,frame=cap.read()
         if not ok: break
         if i%step==0:
             t=i/fps
-            cs=_countdown_score(frame)
-            if cs>=0.60 and t-last_start>8:
-                starts.append(t)
-                last_start=t
-
-            ls=_lobby_score(frame)
-            if ls>=0.72 and t-last_lobby>3:
-                lobbies.append(t)
-                last_lobby=t
-
+            if _countdown_score(frame)>=0.60 and t-last_start>8:
+                countdowns.append(t); last_start=t
+            if _lobby_score(frame)>=0.72 and t-last_lobby>5:
+                lobbies.append(t); last_lobby=t
             progress(min(70,70*t/dur if dur else 0))
         i+=1
     cap.release()
 
-    exact_starts=[]
-    for cand in starts:
+    starts=[]
+    for cand in countdowns:
         exact=_refine_start(path,cand,fps)
-        if exact is not None and (not exact_starts or exact-exact_starts[-1]>8):
-            exact_starts.append(exact)
+        if exact is not None and (not starts or exact-starts[-1]>8):
+            starts.append(exact)
 
-    exact_lobbies=[]
+    lobby_points=[]
     for cand in lobbies:
         exact=_refine_lobby(path,cand,fps)
-        if exact is not None and (not exact_lobbies or exact-exact_lobbies[-1]>3):
-            exact_lobbies.append(exact)
+        if exact is not None and (not lobby_points or exact-lobby_points[-1]>5):
+            lobby_points.append(exact)
 
-    # If the next battle has no visible "Battle starts in 3" (as in some
-    # recordings), recover it from the transition from lobby/loading to
-    # the actual battle HUD. Countdown detection still wins whenever present.
-    fallback_starts=[]
-    search_points=exact_lobbies[:]
-    for lp in search_points:
-        before=next((s for s in exact_starts if s>lp+1), dur)
+    # If a later countdown is missed, recover the next battle from the
+    # gameplay HUD after a confirmed BATTLE lobby.
+    fallback=[]
+    for lp in lobby_points:
+        before=next((s for s in starts if s>lp+1),dur)
         gp=_find_gameplay_start(path,lp+1.0,before-0.5,fps)
-        if gp is not None:
-            fallback_starts.append(gp)
+        if gp is not None: fallback.append(gp)
 
-    all_starts=sorted(exact_starts + fallback_starts)
-    merged_starts=[]
+    all_starts=sorted(starts+fallback)
+    merged=[]
     for s in all_starts:
-        if not merged_starts or s-merged_starts[-1]>8:
-            merged_starts.append(s)
-
-    if not merged_starts:
-        return []
+        if not merged or s-merged[-1]>8: merged.append(s)
+    if not merged: return []
 
     kept=[]
-    for idx,start in enumerate(merged_starts):
-        next_start=merged_starts[idx+1] if idx+1<len(merged_starts) else dur
-
-        # End a battle at the first real lobby/garage after at least 30 seconds.
-        # This keeps the complete result screen but removes the lobby/loading
-        # before the next battle.
-        after=[t for t in exact_lobbies if start+30<t<next_start]
+    for idx,start in enumerate(merged):
+        next_start=merged[idx+1] if idx+1<len(merged) else dur
+        # The first real BATTLE button after the battle is the stop anchor.
+        # Because _refine_lobby finds the first visible frame, Victory/result
+        # stays in the clip and the lobby itself is removed.
+        after=[lp for lp in lobby_points if start+20<lp<next_start]
         if after:
             end=after[0]
-        elif idx+1<len(merged_starts):
+        elif idx+1<len(merged):
+            # Never stop a battle because of a generic HUD change.
             end=max(start,next_start-0.1)
         else:
             end=dur
-
-        if end>start:
-            kept.append((start,end))
+        if end>start: kept.append((start,end))
     return kept
-
-
 
 class App:
     def __init__(self,root):
