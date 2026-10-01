@@ -58,50 +58,66 @@ def _orange_mask(frame):
     return cv2.inRange(hsv, (5,100,100), (30,255,255))
 
 
-def _multiscale_match(frame, name, source_width, mask_kind=None):
-    """Search the whole video frame at several UI scales.
+def _anchor_match(frame, name, source_width, source_height, x_range, y_range):
+    """Match a UI reference at normalized screen positions and several scales.
 
-    This deliberately does not use fixed screen coordinates. A little extra
-    analysis time is preferred over making the detector dependent on one
-    monitor resolution or one recording layout.
+    The search is still independent of monitor resolution: the frame is
+    normalized first, and the expected UI position is expressed as a
+    percentage of the screen rather than fixed pixels.
     """
-    small = cv2.resize(frame, (640,360), interpolation=cv2.INTER_AREA)
+    small = cv2.resize(frame, (960, 540), interpolation=cv2.INTER_AREA)
+    x0 = int(960 * x_range[0]); x1 = int(960 * x_range[1])
+    y0 = int(540 * y_range[0]); y1 = int(540 * y_range[1])
+    roi = small[y0:y1, x0:x1]
 
-    if mask_kind == "green":
-        source = _green_mask(small)
-        ref = _green_mask(_ref_image(name))
-        interpolation = cv2.INTER_NEAREST
-    else:
-        source = cv2.cvtColor(small, cv2.COLOR_BGR2GRAY)
-        ref = _ref_mask(name)
-        interpolation = cv2.INTER_AREA
-
+    ref = _ref_image(name)
+    ref_gray = cv2.cvtColor(ref, cv2.COLOR_BGR2GRAY)
     best = 0.0
-    base = 640.0 / float(source_width)
+    best_center = None
 
-    # Wide enough to cover different game/UI scaling without scanning dozens
-    # of sizes. The search is over the entire frame, not a fixed ROI.
-    for relative_scale in (0.60, 0.75, 0.90, 1.05, 1.20, 1.40):
-        tw = max(8, int(ref.shape[1] * base * relative_scale))
-        th = max(6, int(ref.shape[0] * base * relative_scale))
-        if tw >= source.shape[1] or th >= source.shape[0]:
+    base_x = 960.0 / float(source_width)
+    base_y = 540.0 / float(source_height)
+    base = (base_x + base_y) * 0.5
+
+    for relative_scale in (0.70, 0.85, 1.00, 1.15, 1.30):
+        tw = max(10, int(ref.shape[1] * base * relative_scale))
+        th = max(8, int(ref.shape[0] * base * relative_scale))
+        if tw >= roi.shape[1] or th >= roi.shape[0]:
             continue
-        templ = cv2.resize(ref, (tw,th), interpolation=interpolation)
-        score = float(cv2.matchTemplate(source, templ, cv2.TM_CCOEFF_NORMED).max())
-        if score > best:
-            best = score
 
-    return best
+        templ = cv2.resize(ref_gray, (tw, th), interpolation=cv2.INTER_AREA)
+        score_map = cv2.matchTemplate(
+            cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY),
+            templ,
+            cv2.TM_CCOEFF_NORMED,
+        )
+        _, score, _, loc = cv2.minMaxLoc(score_map)
+
+        if score > best:
+            best = float(score)
+            cx = (x0 + loc[0] + tw / 2) / 960.0
+            cy = (y0 + loc[1] + th / 2) / 540.0
+            best_center = (cx, cy)
+
+    return best, best_center
+
+
+def _countdown_score(frame):
+    # "Battle starts in 3" is a top/center UI element. Searching the full
+    # normalized frame caused ordinary green HUD elements during gameplay to
+    # become false positives. We still search a large screen-independent area,
+    # but validate the known relative position of this UI element.
+    score, _ = _anchor_match(
+        frame, "countdown", 1444, 810,
+        (0.20, 0.80), (0.05, 0.45)
+    )
+    return score
 
 
 def _lobby_score(frame):
-    """Find the BATTLE button anywhere in the frame.
-
-    The orange component is used as a fast candidate detector, then the
-    actual BATTLE-button reference is compared against each candidate.
-    Only the upper part of the frame is used as a soft sanity check; the
-    horizontal position is completely unrestricted.
-    """
+    # The orange BATTLE button is also a top/center UI element. Find orange
+    # components across the whole frame, then require the component to be in
+    # the normalized top-center region. This remains independent of resolution.
     orange = _orange_mask(frame)
     n, labels, stats, _ = cv2.connectedComponentsWithStats(orange)
     ref_gray = _ref_mask("battle_button")
@@ -109,105 +125,87 @@ def _lobby_score(frame):
     best = 0.0
 
     for x, y, w, h, area in stats[1:]:
-        if area < 100:
+        if area < 80:
             continue
-        if y > frame.shape[0] * 0.32:
+        cx = (x + w / 2) / frame.shape[1]
+        cy = (y + h / 2) / frame.shape[0]
+        if not (0.20 <= cx <= 0.80 and 0.02 <= cy <= 0.25):
             continue
-        if not (2.5 <= (w / max(1,h)) <= 6.5):
+        ratio = w / max(1, h)
+        if not (2.5 <= ratio <= 6.5):
             continue
-        if not (35 <= w <= 320 and 7 <= h <= 80):
+        if not (25 <= w <= 360 and 6 <= h <= 100):
             continue
 
         crop_gray = cv2.cvtColor(frame[y:y+h, x:x+w], cv2.COLOR_BGR2GRAY)
-        templ_gray = cv2.resize(ref_gray, (w,h), interpolation=cv2.INTER_AREA)
-        gray_score = float(cv2.matchTemplate(crop_gray, templ_gray, cv2.TM_CCOEFF_NORMED)[0,0])
+        templ_gray = cv2.resize(ref_gray, (w, h), interpolation=cv2.INTER_AREA)
+        gray_score = float(
+            cv2.matchTemplate(crop_gray, templ_gray, cv2.TM_CCOEFF_NORMED)[0, 0]
+        )
 
         crop_orange = orange[y:y+h, x:x+w]
-        templ_orange = cv2.resize(ref_orange, (w,h), interpolation=cv2.INTER_NEAREST)
+        templ_orange = cv2.resize(ref_orange, (w, h), interpolation=cv2.INTER_NEAREST)
         a = crop_orange > 0
         b = templ_orange > 0
         union = np.count_nonzero(a | b)
         iou = (np.count_nonzero(a & b) / union) if union else 0.0
 
-        score = 0.70 * gray_score + 0.30 * iou
-        if score > best:
-            best = score
+        score = 0.75 * gray_score + 0.25 * iou
+        best = max(best, score)
 
     return best
 
 
-def _countdown_score(frame):
-    # Search the whole frame for the green "Battle starts in 3" UI.
-    # Matching the green mask makes the detector less sensitive to the map
-    # underneath the text and the exact screen resolution.
-    green_score = _multiscale_match(frame, "countdown", 1444, "green")
-    gray_score = _multiscale_match(frame, "countdown", 1444, None)
-    return 0.70 * green_score + 0.30 * gray_score
-
-
 def _refine_start(path, candidate, fps):
-    cap=cv2.VideoCapture(path)
-    n=int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
-    first=max(0,int((candidate-1.0)*fps))
-    last=min(n-1,int((candidate+0.5)*fps))
-    cap.set(cv2.CAP_PROP_POS_FRAMES,first)
-    found=None
-    for idx in range(first,last+1):
-        ok,frame=cap.read()
-        if not ok: break
-        if _countdown_score(frame)>=0.60:
-            found=idx/fps
+    cap = cv2.VideoCapture(path)
+    n = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
+    first = max(0, int((candidate - 1.2) * fps))
+    last = min(n - 1, int((candidate + 1.0) * fps))
+
+    cap.set(cv2.CAP_PROP_POS_FRAMES, first)
+    found = None
+    for idx in range(first, last + 1):
+        ok, frame = cap.read()
+        if not ok:
             break
+        if _countdown_score(frame) >= 0.68:
+            found = idx / fps
+            break
+
     cap.release()
     return found
+
 
 def _refine_lobby(path, candidate, fps):
-    """Search backward from a confirmed BATTLE button to its first visible frame."""
-    cap=cv2.VideoCapture(path)
-    n=int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
-    first=max(0,int((candidate-3.0)*fps))
-    last=min(n-1,int((candidate+0.6)*fps))
-    cap.set(cv2.CAP_PROP_POS_FRAMES,first)
-    found=None
-    for idx in range(first,last+1):
-        ok,frame=cap.read()
-        if not ok: break
-        if _lobby_score(frame)>=0.72:
-            found=idx/fps
+    """Search backward from a lobby anchor to its first visible BATTLE frame."""
+    cap = cv2.VideoCapture(path)
+    n = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
+    first = max(0, int((candidate - 3.0) * fps))
+    last = min(n - 1, int((candidate + 0.6) * fps))
+
+    cap.set(cv2.CAP_PROP_POS_FRAMES, first)
+    found = None
+    for idx in range(first, last + 1):
+        ok, frame = cap.read()
+        if not ok:
             break
+        if _lobby_score(frame) >= 0.72:
+            found = idx / fps
+            break
+
     cap.release()
     return found
 
-def _find_gameplay_start(path, after, before, fps):
-    """Find the first sustained gameplay HUD after a lobby/loading section."""
-    cap=cv2.VideoCapture(path)
-    n=int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
-    first=max(0,int(after*fps))
-    last=min(n-1,int(before*fps)) if before is not None else n-1
-    cap.set(cv2.CAP_PROP_POS_FRAMES,first)
-    candidate=None
-    run=0
-    for idx in range(first,last+1):
-        ok,frame=cap.read()
-        if not ok: break
-        if _gameplay_score(frame)>=0.003:
-            run += 1
-            if run >= max(3,int(fps*0.75)):
-                candidate=(idx-run+1)/fps
-                break
-        else:
-            run=0
-    cap.release()
-    return candidate
 
 def detect_battles(path, progress):
-    """Use screen-independent visual anchors to find complete battles.
+    """Detect complete battles using two strict visual anchors.
 
-    Start anchor: "Battle starts in 3"
-    End anchor: the BATTLE button appearing again in the lobby.
+    Start: the real "Battle starts in 3" countdown.
+    End: the orange BATTLE button returning in the lobby.
 
-    The lobby search is global across the frame, so different monitor
-    resolutions, aspect ratios and UI scaling do not require different ROIs.
+    The detector deliberately rejects isolated matches. A countdown must be
+    seen repeatedly in a short time window before it becomes a battle start.
+    This prevents green HUD elements inside a battle from creating new clips.
     """
     cap = cv2.VideoCapture(path)
     if not cap.isOpened():
@@ -217,12 +215,13 @@ def detect_battles(path, progress):
     n = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
     dur = n / fps if n else 0
 
-    # A moderate sample interval keeps analysis practical while the later
-    # refinement pass checks every frame around each detected anchor.
-    step = max(1, round(fps * 0.35))
-    countdowns = []
-    lobbies = []
-    last_start = -999
+    # One analysis sample about every 0.4 s. The exact start is refined
+    # frame-by-frame afterwards.
+    step = max(1, round(fps * 0.40))
+    countdown_candidates = []
+    lobby_candidates = []
+
+    recent_cd = []
     last_lobby = -999
 
     i = 0
@@ -236,12 +235,20 @@ def detect_battles(path, progress):
             cd = _countdown_score(frame)
             lb = _lobby_score(frame)
 
-            if cd >= 0.55 and t - last_start > 8:
-                countdowns.append(t)
-                last_start = t
+            recent_cd.append((t, cd))
+            recent_cd = [(tt, ss) for tt, ss in recent_cd if t - tt <= 1.4]
 
-            if lb >= 0.55 and t - last_lobby > 5:
-                lobbies.append(t)
+            # Require two strong countdown observations close together.
+            # This is the key protection against false positives during play.
+            strong = [tt for tt, ss in recent_cd if ss >= 0.68]
+            if len(strong) >= 2:
+                candidate = strong[0]
+                if not countdown_candidates or candidate - countdown_candidates[-1] > 8:
+                    countdown_candidates.append(candidate)
+                recent_cd = [(t, cd)]
+
+            if lb >= 0.68 and t - last_lobby > 5:
+                lobby_candidates.append(t)
                 last_lobby = t
 
             progress(min(70, 70 * t / dur if dur else 0))
@@ -251,13 +258,13 @@ def detect_battles(path, progress):
     cap.release()
 
     starts = []
-    for cand in countdowns:
+    for cand in countdown_candidates:
         exact = _refine_start(path, cand, fps)
         if exact is not None and (not starts or exact - starts[-1] > 8):
             starts.append(exact)
 
     lobby_points = []
-    for cand in lobbies:
+    for cand in lobby_candidates:
         exact = _refine_lobby(path, cand, fps)
         if exact is not None and (not lobby_points or exact - lobby_points[-1] > 5):
             lobby_points.append(exact)
@@ -269,9 +276,9 @@ def detect_battles(path, progress):
     for idx, start in enumerate(starts):
         next_start = starts[idx + 1] if idx + 1 < len(starts) else dur
 
-        # First BATTLE-button appearance after the battle is the stop anchor.
-        # _refine_lobby searches backward to the first visible BATTLE frame,
-        # so the full Victory/result screen is retained but the lobby is not.
+        # The first real BATTLE-button frame after the battle is the end.
+        # Because _refine_lobby searches backward, the Victory/Defeat result
+        # remains in the output while the following lobby is removed.
         after = [lp for lp in lobby_points if start + 20 < lp < next_start]
         if after:
             end = after[0]
@@ -280,7 +287,7 @@ def detect_battles(path, progress):
         else:
             end = dur
 
-        if end > start:
+        if end - start >= 20:
             kept.append((start, end))
 
     return kept
