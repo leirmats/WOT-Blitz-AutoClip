@@ -137,8 +137,11 @@ def _lobby_score(frame):
     # the normalized top-center region. This remains independent of resolution.
     orange = _orange_mask(frame)
     n, labels, stats, _ = cv2.connectedComponentsWithStats(orange)
-    ref_gray = _ref_mask("battle_button")
-    ref_orange = _orange_mask(_ref_image("battle_button"))
+    # Do not make lobby detection depend on decoding the bundled BATTLE image.
+    # Some PyInstaller builds have shown that embedded PNG occasionally fails
+    # to decode even though the same image is valid in the source tree.
+    # The button itself has a very distinctive orange, wide/short shape, so
+    # use resolution-independent geometry as the primary/fallback detector.
     best = 0.0
 
     for x, y, w, h, area in stats[1:]:
@@ -154,25 +157,25 @@ def _lobby_score(frame):
         if not (25 <= w <= 360 and 6 <= h <= 100):
             continue
 
-        crop = frame[y:y+h, x:x+w]
-        if crop is None or crop.size == 0:
-            continue
-        crop_gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
-        templ_gray = cv2.resize(ref_gray, (w, h), interpolation=cv2.INTER_AREA)
-        gray_score = float(
-            cv2.matchTemplate(crop_gray, templ_gray, cv2.TM_CCOEFF_NORMED)[0, 0]
+        # BATTLE button reference geometry in the normalized 1280x720 layout:
+        # roughly 111x25 px. Score candidates by aspect ratio, relative size,
+        # and how much of the component is orange. This avoids a fragile
+        # dependency on a binary-embedded reference image.
+        ratio_score = max(0.0, 1.0 - abs(ratio - 4.44) / 3.0)
+        rel_w = w / max(1, frame.shape[1])
+        rel_h = h / max(1, frame.shape[0])
+        size_score = max(
+            0.0,
+            1.0
+            - 0.5 * abs(rel_w - (111 / 1280)) / (111 / 1280)
+            - 0.5 * abs(rel_h - (25 / 720)) / (25 / 720),
         )
+        component = orange[y:y+h, x:x+w]
+        orange_fill = float(np.count_nonzero(component)) / max(1, w * h)
+        fill_score = max(0.0, min(1.0, orange_fill / 0.884))
 
-        crop_orange = orange[y:y+h, x:x+w]
-        templ_orange = cv2.resize(ref_orange, (w, h), interpolation=cv2.INTER_NEAREST)
-        a = crop_orange > 0
-        b = templ_orange > 0
-        union = np.count_nonzero(a | b)
-        iou = (np.count_nonzero(a & b) / union) if union else 0.0
-
-        score = 0.75 * gray_score + 0.25 * iou
+        score = 0.45 * ratio_score + 0.30 * size_score + 0.25 * fill_score
         best = max(best, score)
-
     return best
 
 
