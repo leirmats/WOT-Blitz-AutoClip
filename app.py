@@ -35,11 +35,14 @@ REF_B64 = {
 _REF_CACHE = {}
 
 def _ref_image(name):
-    """Decode a bundled reference image as BGR."""
+    """Decode a bundled reference image as BGR and validate it."""
     if name not in _REF_CACHE:
         raw = base64.b64decode(REF_B64[name])
         arr = np.frombuffer(raw, dtype=np.uint8)
-        _REF_CACHE[name] = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+        image = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+        if image is None or image.size == 0:
+            raise RuntimeError(f"Referansebildet '{name}' kunne ikke dekodes.")
+        _REF_CACHE[name] = image
     return _REF_CACHE[name]
 
 
@@ -49,11 +52,15 @@ def _ref_mask(name):
 
 
 def _green_mask(frame):
+    if frame is None or frame.size == 0:
+        return np.zeros((0, 0), dtype=np.uint8)
     hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
     return cv2.inRange(hsv, (35,70,70), (95,255,255))
 
 
 def _orange_mask(frame):
+    if frame is None or frame.size == 0:
+        return np.zeros((0, 0), dtype=np.uint8)
     hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
     return cv2.inRange(hsv, (5,100,100), (30,255,255))
 
@@ -65,12 +72,19 @@ def _anchor_match(frame, name, source_width, source_height, x_range, y_range):
     normalized first, and the expected UI position is expressed as a
     percentage of the screen rather than fixed pixels.
     """
+    if frame is None or frame.size == 0:
+        return 0.0, None
+
     small = cv2.resize(frame, (960, 540), interpolation=cv2.INTER_AREA)
     x0 = int(960 * x_range[0]); x1 = int(960 * x_range[1])
     y0 = int(540 * y_range[0]); y1 = int(540 * y_range[1])
     roi = small[y0:y1, x0:x1]
+    if roi.size == 0:
+        return 0.0, None
 
     ref = _ref_image(name)
+    if ref is None or ref.size == 0:
+        return 0.0, None
     ref_gray = cv2.cvtColor(ref, cv2.COLOR_BGR2GRAY)
     best = 0.0
     best_center = None
@@ -115,6 +129,9 @@ def _countdown_score(frame):
 
 
 def _lobby_score(frame):
+    if frame is None or frame.size == 0:
+        return 0.0
+
     # The orange BATTLE button is also a top/center UI element. Find orange
     # components across the whole frame, then require the component to be in
     # the normalized top-center region. This remains independent of resolution.
@@ -137,7 +154,10 @@ def _lobby_score(frame):
         if not (25 <= w <= 360 and 6 <= h <= 100):
             continue
 
-        crop_gray = cv2.cvtColor(frame[y:y+h, x:x+w], cv2.COLOR_BGR2GRAY)
+        crop = frame[y:y+h, x:x+w]
+        if crop is None or crop.size == 0:
+            continue
+        crop_gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
         templ_gray = cv2.resize(ref_gray, (w, h), interpolation=cv2.INTER_AREA)
         gray_score = float(
             cv2.matchTemplate(crop_gray, templ_gray, cv2.TM_CCOEFF_NORMED)[0, 0]
@@ -168,6 +188,8 @@ def _refine_start(path, candidate, fps):
         ok, frame = cap.read()
         if not ok:
             break
+        if frame is None or frame.size == 0:
+            continue
         if _countdown_score(frame) >= 0.68:
             found = idx / fps
             break
@@ -189,6 +211,8 @@ def _refine_lobby(path, candidate, fps):
         ok, frame = cap.read()
         if not ok:
             break
+        if frame is None or frame.size == 0:
+            continue
         if _lobby_score(frame) >= 0.72:
             found = idx / fps
             break
@@ -229,6 +253,9 @@ def detect_battles(path, progress):
         ok, frame = cap.read()
         if not ok:
             break
+        if frame is None or frame.size == 0:
+            i += 1
+            continue
 
         if i % step == 0:
             t = i / fps
