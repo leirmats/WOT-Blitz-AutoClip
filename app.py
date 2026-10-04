@@ -267,6 +267,7 @@ def detect_battles(path, progress):
     lobby_candidates = []
 
     recent_cd = []
+    recent_lobby = []
     last_lobby = -999
 
     i = 0
@@ -295,9 +296,18 @@ def detect_battles(path, progress):
                     countdown_candidates.append(candidate)
                 recent_cd = [(t, cd)]
 
-            if lb >= 0.68 and t - last_lobby > 5:
-                lobby_candidates.append(t)
+            # Require two strong lobby observations close together.
+            # A single orange UI element can appear briefly during normal
+            # gameplay and look like the BATTLE button. The real lobby button
+            # remains visible for several frames/seconds, so persistence is a
+            # much safer signal than one isolated geometry match.
+            recent_lobby.append((t, lb))
+            recent_lobby = [(tt, ss) for tt, ss in recent_lobby if t - tt <= 1.6]
+            strong_lobbies = [tt for tt, ss in recent_lobby if ss >= 0.68]
+            if len(strong_lobbies) >= 2 and t - last_lobby > 5:
+                lobby_candidates.append(strong_lobbies[0])
                 last_lobby = t
+                recent_lobby = [(t, lb)]
 
             progress(min(70, 70 * t / dur if dur else 0))
 
