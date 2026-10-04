@@ -1,7 +1,6 @@
 import html
 import json
 import re
-import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from urllib.request import Request, urlopen
 
@@ -9,10 +8,12 @@ BASE = "https://blitzhangar.com"
 INDEX = BASE + "/en/"
 UA = "WoT-Blitz-AutoClip/27 tank database builder"
 
+
 def get(url):
     req = Request(url, headers={"User-Agent": UA})
     with urlopen(req, timeout=30) as r:
         return r.read().decode("utf-8", "ignore")
+
 
 def parse_links(page):
     links = re.findall(r'href=["\'](/en/tank/[^"\']+)["\']', page)
@@ -24,21 +25,49 @@ def parse_links(page):
             out.append(BASE + x)
     return out
 
+
 def parse_tank(page, url):
     m = re.search(r'<h1[^>]*>\s*(.*?)\s*</h1>', page, re.I | re.S)
     if not m:
         raise ValueError("No h1: " + url)
+
     h1 = re.sub(r"<[^>]+>", "", m.group(1))
     h1 = html.unescape(h1).strip()
-    # Example: Sheridan — Tier X American light tank
-    m = re.match(r"(.+?)\s+—\s+Tier\s+([IVX]+)\s+(.+?)\s+(light|medium|heavy) tank\s*$", h1, re.I)
-    if not m:
-        m = re.match(r"(.+?)\s+—\s+Tier\s+([IVX]+)\s+(.+?)\s+tank destroyer\s*$", h1, re.I)
-        if m:
-            return {"name": m.group(1).strip(), "tier": m.group(2), "type": "Tank Destroyer"}
-        raise ValueError("Could not parse: " + h1)
-    cls = m.group(4).capitalize()
-    return {"name": m.group(1).strip(), "tier": m.group(2), "type": cls}
+
+    # BlitzHangar currently uses both:
+    #   "Sheridan — Tier X American light tank"
+    #   "Edelweiss — Tier VII medium tank of Hybrid nation"
+    # The nation suffix is metadata and is not part of the tank class.
+    pattern = re.compile(
+        r"(.+?)\s+—\s+Tier\s+([IVX]+)\s+"
+        r"(?:.+?\s+)?(light|medium|heavy)\s+tank"
+        r"(?:\s+of\s+.+?\s+nation)?\s*$",
+        re.I,
+    )
+    m = pattern.match(h1)
+    if m:
+        return {
+            "name": m.group(1).strip(),
+            "tier": m.group(2),
+            "type": m.group(3).capitalize(),
+        }
+
+    td_pattern = re.compile(
+        r"(.+?)\s+—\s+Tier\s+([IVX]+)\s+"
+        r"(?:.+?\s+)?tank destroyer"
+        r"(?:\s+of\s+.+?\s+nation)?\s*$",
+        re.I,
+    )
+    m = td_pattern.match(h1)
+    if m:
+        return {
+            "name": m.group(1).strip(),
+            "tier": m.group(2),
+            "type": "Tank Destroyer",
+        }
+
+    raise ValueError("Could not parse: " + h1)
+
 
 def main():
     page = get(INDEX)
@@ -64,7 +93,6 @@ def main():
         for e in errors[:10]:
             print(e)
 
-    # Remove exact duplicate display entries while retaining different variants.
     unique = {}
     for r in records:
         key = (r["name"].casefold(), r["tier"], r["type"])
@@ -78,7 +106,14 @@ def main():
         json.dump(records, f, ensure_ascii=False, indent=2)
 
     print(f"Generated tank_data.json with {len(records)} tanks")
-    print("Types:", {t: sum(1 for r in records if r["type"] == t) for t in ["Light","Medium","Heavy","Tank Destroyer"]})
+    print(
+        "Types:",
+        {
+            t: sum(1 for r in records if r["type"] == t)
+            for t in ["Light", "Medium", "Heavy", "Tank Destroyer"]
+        },
+    )
+
 
 if __name__ == "__main__":
     main()
