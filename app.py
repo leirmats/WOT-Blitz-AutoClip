@@ -146,6 +146,39 @@ def _countdown_score(frame):
         best = max(best, float(score))
     return best
 
+
+def _battle_hud_score(frame):
+    """Estimate whether the in-battle team HUD is still visible.
+
+    The orange BATTLE button can occasionally be matched by unrelated orange
+    UI during gameplay. The top-left and top-right team panels are a stronger
+    signal: during a live battle they contain dense, changing HUD/text
+    graphics, while the garage/lobby has much less structure in these areas.
+
+    This is deliberately a soft guard rather than a hard battle detector,
+    because players can choose to hide parts of the team roster.
+    """
+    if frame is None or frame.size == 0:
+        return 0.0
+
+    small = cv2.resize(frame, (960, 540), interpolation=cv2.INTER_AREA)
+    gray = cv2.cvtColor(small, cv2.COLOR_BGR2GRAY)
+
+    rois = (
+        gray[0:int(540 * 0.18), 0:int(960 * 0.18)],
+        gray[0:int(540 * 0.18), int(960 * 0.82):960],
+    )
+
+    scores = []
+    for roi in rois:
+        if roi.size == 0:
+            continue
+        edges = cv2.Canny(roi, 100, 200)
+        scores.append(float(np.count_nonzero(edges)) / max(1, edges.size))
+
+    return float(np.mean(scores)) if scores else 0.0
+
+
 def _lobby_score(frame):
     if frame is None or frame.size == 0:
         return 0.0
@@ -160,9 +193,16 @@ def _lobby_score(frame):
     # to decode even though the same image is valid in the source tree.
     # The button itself has a very distinctive orange, wide/short shape, so
     # use resolution-independent geometry as the primary/fallback detector.
+    # Do not accept an orange BATTLE-shaped component while the live
+    # battle HUD is clearly still visible. This is the important protection
+    # against Build 24's remaining failure mode: a gameplay UI element can
+    # briefly look like the orange lobby button and falsely end the battle.
+    if _battle_hud_score(frame) >= 0.035:
+        return 0.0
+
     best = 0.0
 
-    for x, y, w, h, area in stats[1:]:
+    for x, y, w, h, area in stats[1:];
         if area < 80:
             continue
         cx = (x + w / 2) / frame.shape[1]
