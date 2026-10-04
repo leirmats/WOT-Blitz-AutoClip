@@ -8,7 +8,28 @@ import cv2
 import numpy as np
 
 APP="WoT Blitz AutoClip"
-TANKS=["Velg tank…","40TP Habicha","45TP Habicha","50TP Prototyp","50TP Tyszkiewicza","53TP Markowskiego","59-16","90TP Lewandowskiego","A-32","AC Highlander","AC IV Sentinel","AC Ocelote","Agent","AMX 13 M24","AMX CDC","B2","Bassotto","Bretagne Panther","BUGI","Carro d'Assa","Centurion Mk 5/1","DS PZInz","DW2","Edelweiss","Eraser BP44","Explorer","FV215b","FV215b 183","Hafen","HWK 12","Icebreaker","IS-3 Defender","JPanther II","Ju-Nu","Ke-Ho","Kranvagn","Krupp-38(D)","Kunze Panzer","KV-220","Leo","Lorraine 40t","LTG","Luchs","Lupus","M3 Lee","Mark I Male","Mitsu 108","Nameless","Nightmare","Object 84","Ox","P.43/06 SNN","Panther","Panther II","Prowler","Pudel","Pz IV Gargoyle","PZ IV S","Pz V/IV","PZ.Sfl. IVc","Rudolph","SDP 40 Zadymka","SDP 44 Burza","Semovente M41","Sheridan","Skoda P-JS","Skoda T 50","STB-1","SU-100Y","T-25","T-34-3","T-34/100","T26E4","T95","Triumphant","Type 59","U-Panzer","Valentine Mk IX","Vickers Light","VK 45.03","VK 168.01 (P)","Vulcan","WZ Blaze","WZ-113","WZ-121","XM66F","Y5 Firefly","Y5 T-34"]
+TANK_DATA_PATH = Path(__file__).resolve().parent / "tank_data.json"
+try:
+    import json
+    with TANK_DATA_PATH.open("r", encoding="utf-8") as _f:
+        TANK_DATA = json.load(_f)
+except Exception as _e:
+    TANK_DATA = []
+
+if not TANK_DATA:
+    raise RuntimeError("Tankdatabasen mangler. Bygget må inneholde tank_data.json.")
+
+TANK_TYPES = ["Alle tanks", "Light", "Medium", "Heavy", "Tank Destroyer"]
+TANKS = ["Velg tank…"] + [x["name"] for x in sorted(TANK_DATA, key=lambda x: x["name"].casefold())]
+TANKS_BY_TYPE = {
+    "Alle tanks": TANKS,
+    "Light": ["Velg tank…"] + [x["name"] for x in sorted(TANK_DATA, key=lambda x: x["name"].casefold()) if x["type"] == "Light"],
+    "Medium": ["Velg tank…"] + [x["name"] for x in sorted(TANK_DATA, key=lambda x: x["name"].casefold()) if x["type"] == "Medium"],
+    "Heavy": ["Velg tank…"] + [x["name"] for x in sorted(TANK_DATA, key=lambda x: x["name"].casefold()) if x["type"] == "Heavy"],
+    "Tank Destroyer": ["Velg tank…"] + [x["name"] for x in sorted(TANK_DATA, key=lambda x: x["name"].casefold()) if x["type"] == "Tank Destroyer"],
+}
+TANK_TIERS = {x["name"]: x.get("tier", "") for x in TANK_DATA}
+EXT={".mp4",".mkv",".avi",".mov",".webm",".ts",".m4v"}
 EXT={".mp4",".mkv",".avi",".mov",".webm",".ts",".m4v"}
 
 def find_ffmpeg():
@@ -427,8 +448,18 @@ class App:
         row=ttk.Frame(p); row.pack(fill="x")
         self.path=tk.StringVar(); ttk.Entry(row,textvariable=self.path,state="readonly").pack(side="left",fill="x",expand=True)
         ttk.Button(row,text="Velg video…",command=self.choose_video).pack(side="left",padx=(8,0))
-        ttk.Label(p,text="Tank:").pack(anchor="w",pady=(10,2))
-        self.tank=tk.StringVar(value=TANKS[0]); self.tanks=ttk.Combobox(p,textvariable=self.tank,values=TANKS,state="readonly"); self.tanks.pack(fill="x"); self.tanks.bind("<<ComboboxSelected>>",self.tank_changed)
+        ttk.Label(p,text="Tanktype:").pack(anchor="w",pady=(10,2))
+        self.tank_type=tk.StringVar(value=TANK_TYPES[0])
+        self.type_box=ttk.Combobox(p,textvariable=self.tank_type,values=TANK_TYPES,state="readonly")
+        self.type_box.pack(fill="x")
+        self.type_box.bind("<<ComboboxSelected>>",self.tank_type_changed)
+
+        ttk.Label(p,text="Tank:").pack(anchor="w",pady=(8,2))
+        self.tank=tk.StringVar(value=TANKS[0])
+        self.tanks=ttk.Combobox(p,textvariable=self.tank,values=TANKS,state="readonly")
+        self.tanks.pack(fill="x")
+        self.tanks.bind("<<ComboboxSelected>>",self.tank_changed)
+
         ttk.Label(p,text="Nytt filnavn:").pack(anchor="w",pady=(10,2))
         self.name=tk.StringVar(); ttk.Entry(p,textvariable=self.name).pack(fill="x")
         ttk.Label(p,text="Lagre i:").pack(anchor="w",pady=(10,2))
@@ -457,6 +488,17 @@ class App:
     def choose_video(self):
         f=filedialog.askopenfilename(filetypes=[("Video","*.mp4 *.mkv *.avi *.mov *.webm *.ts *.m4v"),("Alle filer","*.*")])
         if f:self.set_video(f)
+    def tank_type_changed(self,_=None):
+        selected = self.tank.get()
+        values = TANKS_BY_TYPE.get(self.tank_type.get(), TANKS)
+        self.tanks.configure(values=values)
+        if selected in values:
+            self.tank.set(selected)
+        else:
+            self.tank.set("Velg tank…")
+        self.tank_changed()
+        self.status.set("Tanktype valgt. Ingenting starter før START REDIGERING.")
+
     def tank_changed(self,_=None):
         t=self.tank.get()
         if self.video:
