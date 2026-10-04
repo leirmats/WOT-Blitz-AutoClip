@@ -26,7 +26,12 @@ jobs:
           Copy-Item $f.FullName build_tools/ffmpeg.exe
       - name: Build EXE
         run: python -m PyInstaller --noconfirm --clean --onefile --windowed --name WoT_Blitz_AutoClip --collect-all tkinterdnd2 --add-binary "build_tools\ffmpeg.exe;." app.py
+      - name: Package tank database next to EXE
+        shell: pwsh
+        run: Copy-Item tank_data.json dist/tank_data.json
       - uses: actions/upload-artifact@v4
         with:
           name: WoT_Blitz_AutoClip-Windows-x64
-          path: dist/WoT_Blitz_AutoClip.exe
+          path: |
+            dist/WoT_Blitz_AutoClip.exe
+            dist/tank_data.json
