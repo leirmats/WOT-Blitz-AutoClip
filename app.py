@@ -320,23 +320,48 @@ def detect_battles(path, progress):
     if not starts:
         return []
 
+    # Use a strict state machine after the first detected battle.
+    #
+    # A false "Battle starts in" match can occasionally happen during normal
+    # gameplay because the HUD contains green elements. Previously such a
+    # false start was accepted as a new battle, and the real battle was then
+    # cut at that false start. From Build 23 onward, a later battle start is
+    # only accepted AFTER a confirmed lobby has been seen following the
+    # previous battle.
+    #
+    # This gives us the intended sequence:
+    #   battle start -> whole battle/results -> lobby -> next battle start
+    #
+    # If no lobby is found after a started battle, never cut that battle in
+    # the middle: keep it to the end of the recording instead.
     kept = []
-    for idx, start in enumerate(starts):
-        next_start = starts[idx + 1] if idx + 1 < len(starts) else dur
 
-        # The first real BATTLE-button frame after the battle is the end.
-        # Because _refine_lobby searches backward, the Victory/Defeat result
-        # remains in the output while the following lobby is removed.
-        after = [lp for lp in lobby_points if start + 20 < lp < next_start]
-        if after:
-            end = after[0]
-        elif idx + 1 < len(starts):
-            end = max(start, next_start - 0.1)
-        else:
-            end = dur
+    first_start = starts[0]
+    current_start = first_start
 
-        if end - start >= 20:
-            kept.append((start, end))
+    # Ignore any other countdown candidates until the first confirmed lobby.
+    remaining_starts = starts[1:]
+
+    while True:
+        after_lobby = [lp for lp in lobby_points if current_start + 20 < lp]
+        if not after_lobby:
+            # No confirmed lobby means we have no safe end anchor. Keeping to
+            # the end is safer than losing the last part of an actual battle.
+            if dur - current_start >= 20:
+                kept.append((current_start, dur))
+            break
+
+        lobby = after_lobby[0]
+        kept.append((current_start, lobby))
+
+        # The next battle must start after this lobby. This prevents a false
+        # countdown detected during the previous battle from ending it.
+        next_candidates = [s for s in remaining_starts if s > lobby + 0.5]
+        if not next_candidates:
+            break
+
+        current_start = next_candidates[0]
+        remaining_starts = [s for s in next_candidates[1:]]
 
     return kept
 
