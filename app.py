@@ -202,7 +202,7 @@ def _lobby_score(frame):
 
     best = 0.0
 
-    for x, y, w, h, area in stats[1:];
+    for x, y, w, h, area in stats[1:]:
         if area < 80:
             continue
         cx = (x + w / 2) / frame.shape[1]
