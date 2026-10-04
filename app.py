@@ -28,6 +28,7 @@ def find_ffmpeg():
 
 
 REF_B64 = {
+    "countdown_text": "iVBORw0KGgoAAAANSUhEUgAAAJoAAAAWCAAAAAAd5tpoAAAA9klEQVRIDc3BQW7TAABFwXn3P/THRm2hxJWIlUVm8rbytvK28rbytvK28rZyZciHhWX51+QvywvlymIZMZosRk6jNTJiDY18mkNuypVl+bCwLIflNIdGlmUxTf5YlptyZU1M08iyLMtpmqaROTVNy2/LstyUK2tyGDktaw45jZjMIYuJ5cuy3JQry1qYFpZlTQ5zalpDFpNvluWmXFlM0zSxLMunoWlOTUyYnJZluSlXhtY0jSzLEOYfWUzT5MOy3JT/thwW1nyT5dGy3JQry2nkyzKEeRTLg+WmPG8e5PXytHmU18uz5kJeL0+aH+TF8pz5SV7sF0czihepBoDuAAAAAElFTkSuQmCC",
     "countdown": "iVBORw0KGgoAAAANSUhEUgAAAKwAAABFCAAAAADyEVJOAAABcUlEQVRo3u2Z4ZKDIAyECXPv/8rfzbTXTrW0RkmCnMmvTg3ZZQ2yaCldQRkUfMemczL98+LnXkPeqSKtnztD9g3nb0TzmkjJyMjIyMjI8I6t/ZaNJGw2bF0Z0bkm+WRxvlWgee39XxSiKcjSyuPh0jYqNDm07pSabN1lTJ8MWdlJPozgdrE1bF1hkdep7KuW6wosSrF7waDloyarhe4dIgZtoO0UTKr4k/U/PdYyUViTFbfkLbIxbwUYoyw758fQNgDXJXnpBea4HE+hrBhlvlorbIjRsBMrE9Jnvm9Za2vLUeuCtKwiCoWNjL7bPjDv00Bihe0DDFcWjq/VXmU5+JyQQLIcOBYMI9vpy2TQAiMQ81JGhpnIliTrRFZSWS+yksom2djGMWg5whCzDf7LSWH0gVHmmGnwSdxKFkLg6jwde8WXHNo+6AWrJ5t0TBvITGQj2NYyEVtbBHyRrOXAE6ee+k65F8cPxkGJ5ZcXDGF+AbiCZkSkUCT8AAAAAElFTkSuQmCC",
     "lobby": "iVBORw0KGgoAAAANSUhEUgAAAJ8AAAAZCAAAAAAKmaP5AAAA9ElEQVRIx+2W0Q6EIAwEGeP///LeSal6Gg0ooA/XB4wa22XaUgnJFCoaZ+4o8TSEd9tf31/fkzZ2iMGNA2J8tboe+pIyqvPDvZPWXch8LlwVOOQmKOqS4lo+DtS2f42U5rU89HdT9DtfKORCaMJPk2dupg2So/r1Z5693rQJ6lzIKj2peqY4BlRAw70s/UvDSrpEQNutxn5LeRfP6lvO0V1U5+ojhkf0nR2oizTDaWI144be8pATRXajuTbjxR5jrxvp47yx1qNyAudCCSuGBpIm+A71eWNk/1yMobPlz7nUPRGnqjeA6gy7cfcBRQloMHJ/7AOEe2Auy2Q6eQAAAABJRU5ErkJggg==",
     "battle_button": "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",
@@ -117,16 +118,33 @@ def _anchor_match(frame, name, source_width, source_height, x_range, y_range):
 
 
 def _countdown_score(frame):
-    # "Battle starts in 3" is a top/center UI element. Searching the full
-    # normalized frame caused ordinary green HUD elements during gameplay to
-    # become false positives. We still search a large screen-independent area,
-    # but validate the known relative position of this UI element.
-    score, _ = _anchor_match(
-        frame, "countdown", 1444, 810,
-        (0.20, 0.80), (0.05, 0.45)
-    )
-    return score
+    """Detect the fixed green "Battle starts in" text, independent of the number."""
+    if frame is None or frame.size == 0:
+        return 0.0
 
+    small = cv2.resize(frame, (960, 540), interpolation=cv2.INTER_AREA)
+    hsv = cv2.cvtColor(small, cv2.COLOR_BGR2HSV)
+    green = cv2.inRange(hsv, (40, 110, 145), (90, 255, 255))
+
+    # Tight, screen-independent area containing the fixed phrase.
+    x0, x1 = int(960 * 0.35), int(960 * 0.65)
+    y0, y1 = int(540 * 0.38), int(540 * 0.49)
+    roi = green[y0:y1, x0:x1]
+    if roi.size == 0:
+        return 0.0
+
+    ref = _ref_mask("countdown_text")
+    best = 0.0
+    for scale in (0.85, 0.92, 1.00, 1.08, 1.15):
+        tw = max(20, int(ref.shape[1] * scale))
+        th = max(10, int(ref.shape[0] * scale))
+        if tw >= roi.shape[1] or th >= roi.shape[0]:
+            continue
+        templ = cv2.resize(ref, (tw, th), interpolation=cv2.INTER_NEAREST)
+        score_map = cv2.matchTemplate(roi, templ, cv2.TM_CCOEFF_NORMED)
+        _, score, _, _ = cv2.minMaxLoc(score_map)
+        best = max(best, float(score))
+    return best
 
 def _lobby_score(frame):
     if frame is None or frame.size == 0:
@@ -193,7 +211,7 @@ def _refine_start(path, candidate, fps):
             break
         if frame is None or frame.size == 0:
             continue
-        if _countdown_score(frame) >= 0.68:
+        if _countdown_score(frame) >= 0.60:
             found = idx / fps
             break
 
@@ -227,7 +245,7 @@ def _refine_lobby(path, candidate, fps):
 def detect_battles(path, progress):
     """Detect complete battles using two strict visual anchors.
 
-    Start: the real "Battle starts in 3" countdown.
+    Start: the first visible "Battle starts in" countdown.
     End: the orange BATTLE button returning in the lobby.
 
     The detector deliberately rejects isolated matches. A countdown must be
@@ -388,7 +406,7 @@ class App:
             if not ff: raise RuntimeError("FFmpeg mangler i programmet.")
             self.set_status("Analyserer video…"); self.msg("Starter analyse.")
             segs=detect_battles(self.video,self.set_progress)
-            if not segs: raise RuntimeError("Fant ingen sikre kamper med «Battle starts in 3».")
+            if not segs: raise RuntimeError("Fant ingen sikre kamper med «Battle starts in».")
 
             out=Path(self.out.get()).expanduser(); out.mkdir(parents=True,exist_ok=True)
             base=Path(self.name.get()).name
