@@ -13,6 +13,9 @@ jobs:
           python-version: "3.13"
       - name: Install dependencies
         run: python -m pip install -r requirements.txt
+      - name: Build BlitzHangar tank database
+        run: python build_tanks.py
+
       - name: Download FFmpeg
         shell: pwsh
         run: |
