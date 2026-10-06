@@ -1,4 +1,4 @@
-import os, threading, subprocess, shutil, tempfile
+import os, sys, threading, subprocess, shutil, tempfile
 import base64
 from pathlib import Path
 import tkinter as tk
@@ -8,7 +8,22 @@ import cv2
 import numpy as np
 
 APP="WoT Blitz AutoClip"
-TANK_DATA_PATH = Path(__file__).resolve().parent / "tank_data.json"
+
+# In a PyInstaller --onefile build, __file__ points into the temporary
+# extraction directory. tank_data.json is packaged next to the EXE, so
+# prefer the EXE directory and keep a bundled fallback for development.
+if getattr(sys, "frozen", False):
+    _tank_data_candidates = [
+        Path(sys.executable).resolve().parent / "tank_data.json",
+        Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent)) / "tank_data.json",
+    ]
+else:
+    _tank_data_candidates = [
+        Path(__file__).resolve().parent / "tank_data.json",
+    ]
+
+TANK_DATA_PATH = next((p for p in _tank_data_candidates if p.exists()), _tank_data_candidates[0])
+
 try:
     import json
     with TANK_DATA_PATH.open("r", encoding="utf-8") as _f:
