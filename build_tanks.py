@@ -99,6 +99,12 @@ def main():
         unique[key] = r
     records = sorted(unique.values(), key=lambda x: x["name"].casefold())
 
+    # BlitzHangar currently exposes this tank with the wrong name.
+    # Keep the source-driven database, but correct the displayed tank name.
+    for r in records:
+        if r["name"] == "HWK 30":
+            r["name"] = "HWK 12"
+
     if len(records) < 590:
         raise RuntimeError(f"Parsed tank database unexpectedly low: {len(records)}")
 
