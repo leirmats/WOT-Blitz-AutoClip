@@ -25,7 +25,7 @@ jobs:
           $f = Get-ChildItem -Recurse build_tools/ffmpeg_extract -Filter ffmpeg.exe | Select-Object -First 1
           Copy-Item $f.FullName build_tools/ffmpeg.exe
       - name: Build EXE
-        run: python -m PyInstaller --noconfirm --clean --onefile --windowed --name WoT_Blitz_AutoClip --collect-all tkinterdnd2 --add-binary "build_tools\ffmpeg.exe;." app.py
+        run: python -m PyInstaller --noconfirm --clean --onefile --windowed --name WoT_Blitz_AutoClip --collect-all tkinterdnd2 --add-binary "build_tools\ffmpeg.exe;." --add-data "tank_data.json;." app.py
       - name: Package tank database next to EXE
         shell: pwsh
         run: Copy-Item tank_data.json dist/tank_data.json
