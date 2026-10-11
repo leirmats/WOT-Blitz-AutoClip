@@ -318,7 +318,7 @@ def _refine_lobby(path, candidate, fps):
     return found
 
 
-def detect_battles(path, progress):
+def detect_battles(path, progress, log=None):
     """Detect complete battles using two strict visual anchors.
 
     Start: the first visible "Battle starts in" countdown.
@@ -336,10 +336,10 @@ def detect_battles(path, progress):
     n = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
     dur = n / fps if n else 0
 
-    # Fast coarse scan: sample about every 0.8 s, then refine detected
-    # candidates frame-by-frame in small local windows below.
-    # Keep confirmation thresholds unchanged to preserve detection safeguards.
-    step = max(1, round(fps * 0.80))
+    # Build 34: sample every 0.4 s. Build 33's 0.8 s interval was too sparse:
+    # a single weak/missed sample could prevent a real countdown from being
+    # confirmed. Candidates are still verified frame-by-frame below.
+    step = max(1, round(fps * 0.40))
     countdown_candidates = []
     lobby_candidates = []
 
@@ -366,11 +366,13 @@ def detect_battles(path, progress):
             lb = _lobby_score(frame)
 
             recent_cd.append((t, cd))
-            recent_cd = [(tt, ss) for tt, ss in recent_cd if t - tt <= 1.4]
+            recent_cd = [(tt, ss) for tt, ss in recent_cd if t - tt <= 2.0]
 
-            # Require two strong countdown observations close together.
-            # This is the key protection against false positives during play.
-            strong = [tt for tt, ss in recent_cd if ss >= 0.68]
+            # Use a more forgiving coarse threshold, then validate the actual
+            # countdown at frame-level in _refine_start. The state machine
+            # below still requires a confirmed lobby before accepting a new
+            # battle, limiting false positives during gameplay.
+            strong = [tt for tt, ss in recent_cd if ss >= 0.62]
             if len(strong) >= 2:
                 candidate = strong[0]
                 if not countdown_candidates or candidate - countdown_candidates[-1] > 8:
@@ -383,8 +385,10 @@ def detect_battles(path, progress):
             # remains visible for several frames/seconds, so persistence is a
             # much safer signal than one isolated geometry match.
             recent_lobby.append((t, lb))
-            recent_lobby = [(tt, ss) for tt, ss in recent_lobby if t - tt <= 1.6]
-            strong_lobbies = [tt for tt, ss in recent_lobby if ss >= 0.68]
+            recent_lobby = [(tt, ss) for tt, ss in recent_lobby if t - tt <= 2.0]
+            # Lobby candidates are also verified at frame-level in
+            # _refine_lobby, which retains its stricter 0.72 threshold.
+            strong_lobbies = [tt for tt, ss in recent_lobby if ss >= 0.62]
             if len(strong_lobbies) >= 2 and t - last_lobby > 5:
                 lobby_candidates.append(strong_lobbies[0])
                 last_lobby = t
@@ -396,17 +400,27 @@ def detect_battles(path, progress):
 
     cap.release()
 
+    if log:
+        log(f"Grovanalyse: {len(countdown_candidates)} mulige kampstarter og {len(lobby_candidates)} mulige lobby-overganger.")
+
     starts = []
     for cand in countdown_candidates:
         exact = _refine_start(path, cand, fps)
         if exact is not None and (not starts or exact - starts[-1] > 8):
             starts.append(exact)
 
+    if log:
+        log("Startkandidater: " + (", ".join(f"{x:.1f}s" for x in countdown_candidates) or "ingen"))
+
     lobby_points = []
     for cand in lobby_candidates:
         exact = _refine_lobby(path, cand, fps)
         if exact is not None and (not lobby_points or exact - lobby_points[-1] > 5):
             lobby_points.append(exact)
+
+    if log:
+        log("Bekreftede kampstarter: " + (", ".join(f"{x:.1f}s" for x in starts) or "ingen"))
+        log("Bekreftede lobby-overganger: " + (", ".join(f"{x:.1f}s" for x in lobby_points) or "ingen"))
 
     if not starts:
         return []
@@ -542,7 +556,7 @@ class App:
             ff=find_ffmpeg()
             if not ff: raise RuntimeError("FFmpeg mangler i programmet.")
             self.set_status("Analyserer video…"); self.msg("Starter analyse.")
-            segs=detect_battles(self.video,self.set_progress)
+            segs=detect_battles(self.video,self.set_progress,self.msg)
             if not segs: raise RuntimeError("Fant ingen sikre kamper med «Battle starts in».")
 
             out=Path(self.out.get()).expanduser(); out.mkdir(parents=True,exist_ok=True)
