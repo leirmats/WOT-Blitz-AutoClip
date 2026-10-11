@@ -1,4 +1,4 @@
-import os, sys, threading, subprocess, shutil, tempfile
+import os, sys, threading, subprocess, shutil, tempfile, time
 import base64
 from pathlib import Path
 import tkinter as tk
@@ -555,8 +555,11 @@ class App:
         try:
             ff=find_ffmpeg()
             if not ff: raise RuntimeError("FFmpeg mangler i programmet.")
+            run_started = time.perf_counter()
             self.set_status("Analyserer video…"); self.msg("Starter analyse.")
+            analysis_started = time.perf_counter()
             segs=detect_battles(self.video,self.set_progress,self.msg)
+            self.msg(f"Analyse ferdig på {(time.perf_counter()-analysis_started)/60:.1f} min.")
             if not segs: raise RuntimeError("Fant ingen sikre kamper med «Battle starts in».")
 
             out=Path(self.out.get()).expanduser(); out.mkdir(parents=True,exist_ok=True)
@@ -568,7 +571,7 @@ class App:
             # cut cleanly on keyframes and could start before "Battle starts in 3".
             def encode_segment(a,b,target):
                 cmd=[ff,"-y","-ss",f"{a:.3f}","-i",self.video,"-t",f"{b-a:.3f}",
-                     "-map","0:v:0","-map","0:a?","-c:v","libx264","-preset","veryfast",
+                     "-map","0:v:0","-map","0:a?","-c:v","libx264","-preset","superfast",
                      "-crf","18","-pix_fmt","yuv420p","-c:a","aac","-b:a","160k",
                      "-movflags","+faststart",str(target)]
                 r=subprocess.run(cmd,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
@@ -582,14 +585,18 @@ class App:
             else:
                 temp_dir=Path(tempfile.mkdtemp(prefix="wot_autoclip_"))
                 parts=[]
+                encode_started = time.perf_counter()
                 for i,(a,b) in enumerate(segs,1):
+                    clip_started = time.perf_counter()
                     self.set_status(f"Klipper kamp {i}/{len(segs)}…")
                     self.msg(f"Kamp {i}: {a:.2f}s → {b:.2f}s")
                     part=temp_dir/f"part_{i:02d}.mp4"
                     encode_segment(a,b,part)
+                    self.msg(f"Kamp {i} ferdig kodet på {(time.perf_counter()-clip_started)/60:.1f} min.")
                     parts.append(part)
                     self.set_progress(70+20*i/len(segs))
 
+                self.msg(f"Samlet klippetid/koding: {(time.perf_counter()-encode_started)/60:.1f} min.")
                 concat_list=temp_dir/"concat.txt"
                 with concat_list.open("w",encoding="utf-8") as f:
                     for part in parts:
@@ -598,12 +605,15 @@ class App:
 
                 self.set_status("Setter kampene sammen til én video…")
                 self.msg(f"Slår sammen {len(parts)} kampklipp.")
+                concat_started = time.perf_counter()
                 cmd=[ff,"-y","-f","concat","-safe","0","-i",str(concat_list),
                      "-map","0","-c","copy","-movflags","+faststart",str(dst)]
                 r=subprocess.run(cmd,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
                 if r.returncode: raise RuntimeError("FFmpeg kunne ikke sette sammen klippene:\n"+r.stderr[-1600:])
+                self.msg(f"Sammenslåing ferdig på {(time.perf_counter()-concat_started)/60:.1f} min.")
 
             self.set_progress(100)
+            self.msg(f"Total behandlingstid: {(time.perf_counter()-run_started)/60:.1f} min.")
             self.set_status(f"Ferdig. {len(segs)} kamper samlet i én video.")
             self.msg("FERDIG: "+str(dst))
             self.root.after(0,lambda:messagebox.showinfo(APP,
