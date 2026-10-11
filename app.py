@@ -336,9 +336,10 @@ def detect_battles(path, progress):
     n = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
     dur = n / fps if n else 0
 
-    # One analysis sample about every 0.4 s. The exact start is refined
-    # frame-by-frame afterwards.
-    step = max(1, round(fps * 0.40))
+    # Fast coarse scan: sample about every 0.8 s, then refine detected
+    # candidates frame-by-frame in small local windows below.
+    # Keep confirmation thresholds unchanged to preserve detection safeguards.
+    step = max(1, round(fps * 0.80))
     countdown_candidates = []
     lobby_candidates = []
 
@@ -348,14 +349,18 @@ def detect_battles(path, progress):
 
     i = 0
     while i < n:
-        ok, frame = cap.read()
+        # Advance each frame, but only retrieve full pixel arrays for samples.
+        # This avoids building a BGR image for every skipped frame.
+        ok = cap.grab()
         if not ok:
             break
-        if frame is None or frame.size == 0:
-            i += 1
-            continue
 
         if i % step == 0:
+            ok, frame = cap.retrieve()
+            if not ok or frame is None or frame.size == 0:
+                i += 1
+                continue
+
             t = i / fps
             cd = _countdown_score(frame)
             lb = _lobby_score(frame)
