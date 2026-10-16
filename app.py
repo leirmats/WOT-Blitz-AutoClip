@@ -585,7 +585,7 @@ class App:
             # cut cleanly on keyframes and could start before "Battle starts in 3".
             def encode_segment(a,b,target):
                 cmd=[ff,"-y","-ss",f"{a:.3f}","-i",self.video,"-t",f"{b-a:.3f}",
-                     "-map","0:v:0","-map","0:a?","-c:v","libx264","-preset","superfast",
+                     "-map","0:v:0","-map","0:a?","-c:v","libx264","-preset","ultrafast",
                      "-crf","18","-pix_fmt","yuv420p","-c:a","aac","-b:a","160k",
                      "-movflags","+faststart",str(target)]
                 r=subprocess.run(cmd,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
