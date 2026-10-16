@@ -177,15 +177,16 @@ def _countdown_score(frame):
         return 0.0
 
     small = cv2.resize(frame, (960, 540), interpolation=cv2.INTER_AREA)
-    hsv = cv2.cvtColor(small, cv2.COLOR_BGR2HSV)
-    green = cv2.inRange(hsv, (40, 110, 145), (90, 255, 255))
 
-    # Tight, screen-independent area containing the fixed phrase.
+    # HSV conversion is pixel-independent, so process only the same fixed
+    # countdown ROI instead of converting the entire resized screen.
     x0, x1 = int(960 * 0.35), int(960 * 0.65)
     y0, y1 = int(540 * 0.38), int(540 * 0.49)
-    roi = green[y0:y1, x0:x1]
-    if roi.size == 0:
+    bgr_roi = small[y0:y1, x0:x1]
+    if bgr_roi.size == 0:
         return 0.0
+    hsv = cv2.cvtColor(bgr_roi, cv2.COLOR_BGR2HSV)
+    roi = cv2.inRange(hsv, (40, 110, 145), (90, 255, 255))
 
     best = 0.0
     for templ in _countdown_templates():
@@ -212,17 +213,19 @@ def _battle_hud_score(frame):
         return 0.0
 
     small = cv2.resize(frame, (960, 540), interpolation=cv2.INTER_AREA)
-    gray = cv2.cvtColor(small, cv2.COLOR_BGR2GRAY)
 
+    # Grayscale conversion is pixel-independent; convert only the two HUD
+    # panels used by the score rather than the entire resized frame.
     rois = (
-        gray[0:int(540 * 0.18), 0:int(960 * 0.18)],
-        gray[0:int(540 * 0.18), int(960 * 0.82):960],
+        small[0:int(540 * 0.18), 0:int(960 * 0.18)],
+        small[0:int(540 * 0.18), int(960 * 0.82):960],
     )
 
     scores = []
-    for roi in rois:
-        if roi.size == 0:
+    for roi_bgr in rois:
+        if roi_bgr.size == 0:
             continue
+        roi = cv2.cvtColor(roi_bgr, cv2.COLOR_BGR2GRAY)
         edges = cv2.Canny(roi, 100, 200)
         scores.append(float(np.count_nonzero(edges)) / max(1, edges.size))
 
@@ -233,10 +236,15 @@ def _lobby_score(frame):
     if frame is None or frame.size == 0:
         return 0.0
 
-    # The orange BATTLE button is also a top/center UI element. Find orange
-    # components across the whole frame, then require the component to be in
-    # the normalized top-center region. This remains independent of resolution.
-    orange = _orange_mask(frame)
+    # The BATTLE button can only be accepted in the upper-center region.
+    # Include generous margins so components that pass the existing
+    # center/size tests remain inside the crop at common resolutions.
+    fh, fw = frame.shape[:2]
+    crop_x0 = int(fw * 0.05)
+    crop_x1 = int(fw * 0.95)
+    crop_y0 = 0
+    crop_y1 = min(fh, int(fh * 0.40))
+    orange = _orange_mask(frame[crop_y0:crop_y1, crop_x0:crop_x1])
     n, labels, stats, _ = cv2.connectedComponentsWithStats(orange)
     # Do not make lobby detection depend on decoding the bundled BATTLE image.
     # Some PyInstaller builds have shown that embedded PNG occasionally fails
@@ -255,8 +263,11 @@ def _lobby_score(frame):
     for x, y, w, h, area in stats[1:]:
         if area < 80:
             continue
-        cx = (x + w / 2) / frame.shape[1]
-        cy = (y + h / 2) / frame.shape[0]
+        # Translate cropped component coordinates back to full-frame space.
+        full_x = x + crop_x0
+        full_y = y + crop_y0
+        cx = (full_x + w / 2) / fw
+        cy = (full_y + h / 2) / fh
         if not (0.20 <= cx <= 0.80 and 0.02 <= cy <= 0.25):
             continue
         ratio = w / max(1, h)
@@ -270,8 +281,8 @@ def _lobby_score(frame):
         # and how much of the component is orange. This avoids a fragile
         # dependency on a binary-embedded reference image.
         ratio_score = max(0.0, 1.0 - abs(ratio - 4.44) / 3.0)
-        rel_w = w / max(1, frame.shape[1])
-        rel_h = h / max(1, frame.shape[0])
+        rel_w = w / max(1, fw)
+        rel_h = h / max(1, fh)
         size_score = max(
             0.0,
             1.0
@@ -287,49 +298,63 @@ def _lobby_score(frame):
     return best
 
 
-def _refine_start(path, candidate, fps):
-    cap = cv2.VideoCapture(path)
-    n = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
-    first = max(0, int((candidate - 1.2) * fps))
-    last = min(n - 1, int((candidate + 1.0) * fps))
+def _refine_candidates(path, countdown_candidates, lobby_candidates, fps, frame_count):
+    """Refine all candidates in one pass, reading overlapping frame windows once."""
+    windows = []
+    for candidate in countdown_candidates:
+        first = max(0, int((candidate - 1.2) * fps))
+        last = min(frame_count - 1, int((candidate + 1.0) * fps))
+        windows.append({"kind": "start", "candidate": candidate, "first": first, "last": last, "found": None})
+    for candidate in lobby_candidates:
+        first = max(0, int((candidate - 3.0) * fps))
+        last = min(frame_count - 1, int((candidate + 0.6) * fps))
+        windows.append({"kind": "lobby", "candidate": candidate, "first": first, "last": last, "found": None})
 
-    cap.set(cv2.CAP_PROP_POS_FRAMES, first)
-    found = None
-    for idx in range(first, last + 1):
-        ok, frame = cap.read()
-        if not ok:
-            break
-        if frame is None or frame.size == 0:
-            continue
-        if _countdown_score(frame) >= 0.60:
-            found = idx / fps
-            break
+    windows.sort(key=lambda w: (w["first"], w["last"]))
+    if not windows:
+        return [], []
+
+    # Merge overlapping/touching windows so each frame in the union is decoded once.
+    ranges = []
+    for window in windows:
+        if not ranges or window["first"] > ranges[-1][1] + 1:
+            ranges.append([window["first"], window["last"]])
+        else:
+            ranges[-1][1] = max(ranges[-1][1], window["last"])
+
+    cap = cv2.VideoCapture(path)
+    if not cap.isOpened():
+        raise RuntimeError("Kunne ikke åpne videoen for finjustering.")
+
+    for range_first, range_last in ranges:
+        cap.set(cv2.CAP_PROP_POS_FRAMES, range_first)
+        for idx in range(range_first, range_last + 1):
+            ok, frame = cap.read()
+            if not ok:
+                break
+            if frame is None or frame.size == 0:
+                continue
+
+            start_score = None
+            lobby_score = None
+            for window in windows:
+                if window["found"] is not None or not (window["first"] <= idx <= window["last"]):
+                    continue
+                if window["kind"] == "start":
+                    if start_score is None:
+                        start_score = _countdown_score(frame)
+                    if start_score >= 0.60:
+                        window["found"] = idx / fps
+                else:
+                    if lobby_score is None:
+                        lobby_score = _lobby_score(frame)
+                    if lobby_score >= 0.72:
+                        window["found"] = idx / fps
 
     cap.release()
-    return found
-
-
-def _refine_lobby(path, candidate, fps):
-    """Search backward from a lobby anchor to its first visible BATTLE frame."""
-    cap = cv2.VideoCapture(path)
-    n = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
-    first = max(0, int((candidate - 3.0) * fps))
-    last = min(n - 1, int((candidate + 0.6) * fps))
-
-    cap.set(cv2.CAP_PROP_POS_FRAMES, first)
-    found = None
-    for idx in range(first, last + 1):
-        ok, frame = cap.read()
-        if not ok:
-            break
-        if frame is None or frame.size == 0:
-            continue
-        if _lobby_score(frame) >= 0.72:
-            found = idx / fps
-            break
-
-    cap.release()
-    return found
+    starts = [w["found"] for w in windows if w["kind"] == "start" and w["found"] is not None]
+    lobbies = [w["found"] for w in windows if w["kind"] == "lobby" and w["found"] is not None]
+    return starts, lobbies
 
 
 def detect_battles(path, progress, log=None):
@@ -361,6 +386,7 @@ def detect_battles(path, progress, log=None):
     recent_lobby = []
     last_lobby = -999
 
+    scan_started = time.perf_counter()
     i = 0
     while i < n:
         # Advance each frame, but only retrieve full pixel arrays for samples.
@@ -413,24 +439,30 @@ def detect_battles(path, progress, log=None):
         i += 1
 
     cap.release()
+    scan_elapsed = time.perf_counter() - scan_started
 
     if log:
+        log(f"Grovanalyse ferdig på {scan_elapsed/60:.1f} min.")
         log(f"Grovanalyse: {len(countdown_candidates)} mulige kampstarter og {len(lobby_candidates)} mulige lobby-overganger.")
 
+    refinement_started = time.perf_counter()
+    refined_starts, refined_lobbies = _refine_candidates(path, countdown_candidates, lobby_candidates, fps, n)
+
     starts = []
-    for cand in countdown_candidates:
-        exact = _refine_start(path, cand, fps)
-        if exact is not None and (not starts or exact - starts[-1] > 8):
+    for exact in refined_starts:
+        if not starts or exact - starts[-1] > 8:
             starts.append(exact)
 
     if log:
         log("Startkandidater: " + (", ".join(f"{x:.1f}s" for x in countdown_candidates) or "ingen"))
 
     lobby_points = []
-    for cand in lobby_candidates:
-        exact = _refine_lobby(path, cand, fps)
-        if exact is not None and (not lobby_points or exact - lobby_points[-1] > 5):
+    for exact in refined_lobbies:
+        if not lobby_points or exact - lobby_points[-1] > 5:
             lobby_points.append(exact)
+
+    if log:
+        log(f"Finjustering ferdig på {(time.perf_counter()-refinement_started)/60:.1f} min.")
 
     if log:
         log("Bekreftede kampstarter: " + (", ".join(f"{x:.1f}s" for x in starts) or "ingen"))
@@ -585,7 +617,7 @@ class App:
             # cut cleanly on keyframes and could start before "Battle starts in 3".
             def encode_segment(a,b,target):
                 cmd=[ff,"-y","-ss",f"{a:.3f}","-i",self.video,"-t",f"{b-a:.3f}",
-                     "-map","0:v:0","-map","0:a?","-c:v","libx264","-preset","ultrafast",
+                     "-map","0:v:0","-map","0:a?","-c:v","libx264","-preset","superfast",
                      "-crf","18","-pix_fmt","yuv420p","-c:a","aac","-b:a","160k",
                      "-movflags","+faststart",str(target)]
                 r=subprocess.run(cmd,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
