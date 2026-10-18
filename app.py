@@ -171,12 +171,13 @@ def _anchor_match(frame, name, source_width, source_height, x_range, y_range):
     return best, best_center
 
 
-def _countdown_score(frame):
+def _countdown_score(frame, small=None):
     """Detect the fixed green "Battle starts in" text, independent of the number."""
     if frame is None or frame.size == 0:
         return 0.0
 
-    small = cv2.resize(frame, (960, 540), interpolation=cv2.INTER_AREA)
+    if small is None:
+        small = cv2.resize(frame, (960, 540), interpolation=cv2.INTER_AREA)
 
     # HSV conversion is pixel-independent, so process only the same fixed
     # countdown ROI instead of converting the entire resized screen.
@@ -198,7 +199,7 @@ def _countdown_score(frame):
     return best
 
 
-def _battle_hud_score(frame):
+def _battle_hud_score(frame, small=None):
     """Estimate whether the in-battle team HUD is still visible.
 
     The orange BATTLE button can occasionally be matched by unrelated orange
@@ -212,7 +213,8 @@ def _battle_hud_score(frame):
     if frame is None or frame.size == 0:
         return 0.0
 
-    small = cv2.resize(frame, (960, 540), interpolation=cv2.INTER_AREA)
+    if small is None:
+        small = cv2.resize(frame, (960, 540), interpolation=cv2.INTER_AREA)
 
     # Grayscale conversion is pixel-independent; convert only the two HUD
     # panels used by the score rather than the entire resized frame.
@@ -232,7 +234,7 @@ def _battle_hud_score(frame):
     return float(np.mean(scores)) if scores else 0.0
 
 
-def _lobby_score(frame):
+def _lobby_score(frame, small=None):
     if frame is None or frame.size == 0:
         return 0.0
 
@@ -255,7 +257,7 @@ def _lobby_score(frame):
     # battle HUD is clearly still visible. This is the important protection
     # against Build 24's remaining failure mode: a gameplay UI element can
     # briefly look like the orange lobby button and falsely end the battle.
-    if _battle_hud_score(frame) >= 0.035:
+    if _battle_hud_score(frame, small=small) >= 0.035:
         return 0.0
 
     best = 0.0
@@ -342,12 +344,14 @@ def _refine_candidates(path, countdown_candidates, lobby_candidates, fps, frame_
                     continue
                 if window["kind"] == "start":
                     if start_score is None:
-                        start_score = _countdown_score(frame)
+                        small = cv2.resize(frame, (960, 540), interpolation=cv2.INTER_AREA)
+                        start_score = _countdown_score(frame, small=small)
                     if start_score >= 0.60:
                         window["found"] = idx / fps
                 else:
                     if lobby_score is None:
-                        lobby_score = _lobby_score(frame)
+                        small = cv2.resize(frame, (960, 540), interpolation=cv2.INTER_AREA)
+                        lobby_score = _lobby_score(frame, small=small)
                     if lobby_score >= 0.72:
                         window["found"] = idx / fps
 
@@ -402,8 +406,12 @@ def detect_battles(path, progress, log=None):
                 continue
 
             t = i / fps
-            cd = _countdown_score(frame)
-            lb = _lobby_score(frame)
+            # Resize each sampled frame once and reuse it for the two detectors
+            # that use the normalized 960x540 image. Keep lobby orange-mask
+            # processing on the original frame to preserve component geometry.
+            small = cv2.resize(frame, (960, 540), interpolation=cv2.INTER_AREA)
+            cd = _countdown_score(frame, small=small)
+            lb = _lobby_score(frame, small=small)
 
             recent_cd.append((t, cd))
             recent_cd = [(tt, ss) for tt, ss in recent_cd if t - tt <= 2.0]
