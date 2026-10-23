@@ -106,6 +106,24 @@ def _countdown_templates():
     return _COUNTDOWN_TEMPLATES
 
 
+def choose_video_encoder(ff):
+    """Prefer a hardware H.264 encoder, but keep x264 as a safe fallback."""
+    try:
+        result = subprocess.run([ff, "-hide_banner", "-encoders"],
+                                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                text=True, timeout=20)
+        encoders = result.stdout or ""
+    except Exception:
+        encoders = ""
+    if "h264_nvenc" in encoders:
+        return ["-c:v", "h264_nvenc", "-preset", "p4", "-rc", "vbr", "-cq", "20", "-b:v", "0"]
+    if "h264_qsv" in encoders:
+        return ["-c:v", "h264_qsv", "-global_quality", "21"]
+    if "h264_amf" in encoders:
+        return ["-c:v", "h264_amf", "-quality", "quality", "-qp_i", "20", "-qp_p", "22"]
+    return ["-c:v", "libx264", "-preset", "superfast", "-crf", "18"]
+
+
 def _green_mask(frame):
     if frame is None or frame.size == 0:
         return np.zeros((0, 0), dtype=np.uint8)
@@ -550,6 +568,13 @@ class App:
 
         ttk.Label(p,text="Nytt filnavn:").pack(anchor="w",pady=(10,2))
         self.name=tk.StringVar(); ttk.Entry(p,textvariable=self.name).pack(fill="x")
+        ttk.Label(p,text="Organisering:").pack(anchor="w",pady=(10,2))
+        self.organization=tk.StringVar(value="Én fil per tank – felles mappe")
+        self.organization_box=ttk.Combobox(
+            p, textvariable=self.organization,
+            values=["Én fil per tank – felles mappe", "Én fil per tank – undermapper"],
+            state="readonly")
+        self.organization_box.pack(fill="x")
         ttk.Label(p,text="Lagre i:").pack(anchor="w",pady=(10,2))
         orow=ttk.Frame(p); orow.pack(fill="x"); self.out=tk.StringVar(); ttk.Entry(orow,textvariable=self.out).pack(side="left",fill="x",expand=True); ttk.Button(orow,text="Velg mappe…",command=self.choose_dir).pack(side="left",padx=(8,0))
         self.start=ttk.Button(p,text="▶  START REDIGERING",command=self.start_edit); self.start.pack(fill="x",ipady=8,pady=14)
@@ -616,21 +641,32 @@ class App:
             self.msg(f"Analyse ferdig på {(time.perf_counter()-analysis_started)/60:.1f} min.")
             if not segs: raise RuntimeError("Fant ingen sikre kamper med «Battle starts in».")
 
-            out=Path(self.out.get()).expanduser(); out.mkdir(parents=True,exist_ok=True)
+            out=Path(self.out.get()).expanduser()
+            tank_name=self.tank.get() if self.tank.get()!="Velg tank…" else "Ukjent_tank"
+            if self.organization.get()=="Én fil per tank – undermapper":
+                out=out/tank_name
+            out.mkdir(parents=True,exist_ok=True)
             base=Path(self.name.get()).name
             if Path(base).suffix.lower()!=".mp4": base+=".mp4"
-            dst=out/base
+            dst=out/f"{tank_name}_{Path(base).stem}.mp4"
 
-            # Frame-accurate trimming requires re-encoding; stream copy can only
-            # cut cleanly on keyframes and could start before "Battle starts in 3".
+            # Keep Build 39's detected cut points unchanged. Use hardware H.264
+            # when available; retry with the known x264 settings if it fails.
+            video_encoder = choose_video_encoder(ff)
+            self.msg("Valgt videokoder: " + " ".join(video_encoder))
             def encode_segment(a,b,target):
-                cmd=[ff,"-y","-ss",f"{a:.3f}","-i",self.video,"-t",f"{b-a:.3f}",
-                     "-map","0:v:0","-map","0:a?","-c:v","libx264","-preset","superfast",
-                     "-crf","18","-pix_fmt","yuv420p","-c:a","aac","-b:a","160k",
-                     "-movflags","+faststart",str(target)]
-                r=subprocess.run(cmd,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
-                if r.returncode:
-                    raise RuntimeError("FFmpeg feilet under presis klipping:\n"+r.stderr[-1600:])
+                def run_encode(encoder):
+                    cmd=[ff,"-y","-ss",f"{a:.3f}","-i",self.video,"-t",f"{b-a:.3f}",
+                         "-map","0:v:0","-map","0:a?"] + encoder + [
+                         "-pix_fmt","yuv420p","-c:a","aac","-b:a","160k",
+                         "-movflags","+faststart",str(target)]
+                    return subprocess.run(cmd,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
+                result=run_encode(video_encoder)
+                if result.returncode and video_encoder[1]!="libx264":
+                    self.msg("Maskinvarekoding feilet; prøver programvarekoding.")
+                    result=run_encode(["-c:v","libx264","-preset","superfast","-crf","18"])
+                if result.returncode:
+                    raise RuntimeError("FFmpeg feilet under presis klipping:\\n"+result.stderr[-1600:])
 
             if len(segs)==1:
                 a,b=segs[0]
