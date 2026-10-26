@@ -33,7 +33,7 @@ jobs:
           Copy-Item "C:\Program Files\Tesseract-OCR\*.dll" build_tools/tesseract/
           Copy-Item "C:\Program Files\Tesseract-OCR\tessdata" build_tools/tesseract/ -Recurse
       - name: Build EXE
-        run: python -m PyInstaller --noconfirm --clean --onefile --windowed --name WoT_Blitz_AutoClip --collect-all tkinterdnd2 --add-binary "build_tools\ffmpeg.exe;." --add-data "tank_data.json;." app.py
+        run: python -m PyInstaller --noconfirm --clean --onefile --windowed --name WoT_Blitz_AutoClip --collect-all tkinterdnd2 --add-binary "build_tools\ffmpeg.exe;." --add-binary "build_tools\tesseract\tesseract.exe;tesseract" --add-data "build_tools\tesseract\tessdata;tesseract/tessdata" --add-data "tank_data.json;." app.py
       - name: Package tank database next to EXE
         shell: pwsh
         run: Copy-Item tank_data.json dist/tank_data.json
