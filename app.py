@@ -851,9 +851,10 @@ class App:
             self.set_progress(100)
             self.msg(f"Total behandlingstid: {(time.perf_counter()-run_started)/60:.1f} min.")
             self.set_status(f"Ferdig. {len(segs)} kamper fordelt på {len(outputs)} tankvideoer.")
-            self.msg("FERDIG: "+str(dst))
+            self.msg("FERDIG: " + " | ".join(str(p) for p in outputs))
+            output_list="\\n".join(str(p) for p in outputs)
             self.root.after(0,lambda:messagebox.showinfo(APP,
-                f"Ferdig!\n{len(segs)} kamper samlet i én video.\n\nLagret i:\n{dst}"))
+                f"Ferdig!\\n{len(segs)} kamper fordelt på {len(outputs)} tankvideoer.\\n\\nLagret i:\\n{output_list}"))
         except Exception as e:
             self.set_status("Feil – se loggen."); self.msg("FEIL: "+str(e))
             self.root.after(0,lambda:messagebox.showerror(APP,str(e)))
