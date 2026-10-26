@@ -6,6 +6,11 @@ from tkinter import ttk, filedialog, messagebox
 from tkinterdnd2 import TkinterDnD, DND_FILES
 import cv2
 import numpy as np
+import re
+try:
+    import pytesseract
+except Exception:
+    pytesseract = None
 
 APP="WoT Blitz AutoClip"
 
@@ -104,6 +109,127 @@ def _countdown_templates():
             templates.append(cv2.resize(ref, (tw, th), interpolation=cv2.INTER_NEAREST))
         _COUNTDOWN_TEMPLATES = tuple(templates)
     return _COUNTDOWN_TEMPLATES
+
+
+def _tank_key(value):
+    return re.sub(r"[^a-z0-9]+", "", str(value).casefold())
+
+
+def _tesseract_setup():
+    """Find the bundled OCR engine in the frozen app or source checkout."""
+    if pytesseract is None:
+        return False
+    candidates = []
+    if getattr(sys, "frozen", False):
+        base = Path(getattr(sys, "_MEIPASS", Path(sys.executable).resolve().parent))
+        candidates.extend([base / "tesseract" / "tesseract.exe",
+                           Path(sys.executable).resolve().parent / "tesseract" / "tesseract.exe"])
+        tessdata = base / "tesseract" / "tessdata"
+        if tessdata.exists():
+            os.environ["TESSDATA_PREFIX"] = str(tessdata)
+    else:
+        base = Path(__file__).resolve().parent
+        candidates.extend([base / "build_tools" / "tesseract" / "tesseract.exe",
+                           base / "tesseract" / "tesseract.exe"])
+    for candidate in candidates:
+        if candidate.exists():
+            pytesseract.pytesseract.tesseract_cmd = str(candidate)
+            return True
+    return False
+
+
+def recognize_tank_near_time(video_path, seconds, tank_names):
+    """Read the selected tank from the garage carousel near a battle start.
+    Detection is intentionally independent from detect_battles().
+    """
+    if pytesseract is None or not _tesseract_setup():
+        return None, 0.0
+    cap = cv2.VideoCapture(str(video_path))
+    if not cap.isOpened():
+        return None, 0.0
+    try:
+        fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
+        # Sample just before the battle, where the garage carousel is usually visible.
+        target = max(0.0, float(seconds) - 4.0)
+        cap.set(cv2.CAP_PROP_POS_MSEC, target * 1000.0)
+        ok, frame = cap.read()
+        if not ok or frame is None:
+            return None, 0.0
+        h, w = frame.shape[:2]
+        # The carousel is at the bottom of the game image. Black letterbox bars
+        # are harmless; enlarge the crop to make small tank labels easier to read.
+        roi = frame[int(h * 0.68):int(h * 0.83), :]
+        if roi.size == 0:
+            return None, 0.0
+        roi = cv2.resize(roi, None, fx=2.0, fy=2.0, interpolation=cv2.INTER_CUBIC)
+        data = pytesseract.image_to_data(
+            roi, config="--psm 11", output_type=pytesseract.Output.DICT
+        )
+        # Combine nearby OCR tokens into short strings; tank names can contain spaces.
+        tokens = []
+        for i, raw in enumerate(data.get("text", [])):
+            token = str(raw).strip()
+            if len(token) < 2:
+                continue
+            try:
+                conf = float(data["conf"][i])
+            except Exception:
+                conf = 0
+            if conf >= 15:
+                tokens.append((token, int(data["left"][i]), int(data["top"][i]),
+                               int(data["width"][i]), int(data["height"][i]), conf))
+        # Detect the orange selected-card underline, then prefer an OCR match closest
+        # to its horizontal center. This avoids selecting a neighbouring carousel tank.
+        hsv = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
+        orange = cv2.inRange(hsv, (5, 100, 100), (30, 255, 255))
+        underline_y0 = int(orange.shape[0] * 0.72)
+        lower = orange[underline_y0:, :]
+        contours, _ = cv2.findContours(lower, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        underline_x = None
+        best_line = 0
+        for contour in contours:
+            x, y, cw, ch = cv2.boundingRect(contour)
+            if cw >= max(18, int(roi.shape[1] * 0.015)) and cw > ch * 2:
+                if cw > best_line:
+                    best_line = cw
+                    underline_x = x + cw / 2
+        names = sorted(tank_names, key=len, reverse=True)
+        text_all = " ".join(t[0] for t in tokens)
+        normalized_all = _tank_key(text_all)
+        candidates = []
+        for name in names:
+            key = _tank_key(name)
+            if len(key) < 3 or key not in normalized_all:
+                continue
+            # Estimate the OCR token group position using the nearest token whose
+            # normalized text overlaps the name; when unavailable, penalize less.
+            parts = [p for p in re.split(r"\s+", name.strip()) if p]
+            matched = [t for t in tokens if _tank_key(t[0]) in key or key in _tank_key(t[0])]
+            if not matched and len(parts) > 1:
+                matched = [t for t in tokens if _tank_key(t[0]) in [_tank_key(p) for p in parts]]
+            if matched:
+                center = sum(t[1] + t[3] / 2 for t in matched) / len(matched)
+                confidence = sum(t[5] for t in matched) / len(matched)
+            else:
+                center, confidence = 0, 20
+            distance = abs(center - underline_x) if underline_x is not None else 0
+            candidates.append((name, confidence - (distance / max(1, roi.shape[1])) * 35, distance))
+        if not candidates:
+            return None, 0.0
+        candidates.sort(key=lambda item: item[1], reverse=True)
+        name, score, _ = candidates[0]
+        if underline_x is not None and len(candidates) > 1:
+            # If a second OCR match is materially closer to the selected underline,
+            # prefer it instead of guessing from OCR text alone.
+            nearest = sorted(candidates, key=lambda item: item[2])[0]
+            if nearest[2] + roi.shape[1] * 0.03 < candidates[0][2]:
+                name = nearest[0]
+                score = nearest[1]
+        return (name, score) if score >= 18 else (None, score)
+    except Exception:
+        return None, 0.0
+    finally:
+        cap.release()
 
 
 def choose_video_encoder(ff):
@@ -554,20 +680,20 @@ class App:
         row=ttk.Frame(p); row.pack(fill="x")
         self.path=tk.StringVar(); ttk.Entry(row,textvariable=self.path,state="readonly").pack(side="left",fill="x",expand=True)
         ttk.Button(row,text="Velg video…",command=self.choose_video).pack(side="left",padx=(8,0))
-        ttk.Label(p,text="Tanktype:").pack(anchor="w",pady=(10,2))
+        ttk.Label(p,text="Tankgjenkjenning: automatisk").pack(anchor="w",pady=(10,2))
         self.tank_type=tk.StringVar(value=TANK_TYPES[0])
         self.type_box=ttk.Combobox(p,textvariable=self.tank_type,values=TANK_TYPES,state="readonly")
         self.type_box.pack(fill="x")
         self.type_box.bind("<<ComboboxSelected>>",self.tank_type_changed)
 
-        ttk.Label(p,text="Tank:").pack(anchor="w",pady=(8,2))
+        ttk.Label(p,text="Tankliste (brukes ikke ved automatisk behandling):").pack(anchor="w",pady=(8,2))
         self.tank=tk.StringVar(value=TANKS[0])
         self.tanks=ttk.Combobox(p,textvariable=self.tank,values=TANKS,state="readonly")
         self.tanks.pack(fill="x")
         self.tanks.bind("<<ComboboxSelected>>",self.tank_changed)
 
         ttk.Label(p,text="Nytt filnavn:").pack(anchor="w",pady=(10,2))
-        self.name=tk.StringVar(); ttk.Entry(p,textvariable=self.name).pack(fill="x")
+        self.name=tk.StringVar(value="Automatisk tanknavn"); ttk.Entry(p,textvariable=self.name,state="disabled").pack(fill="x")
         ttk.Label(p,text="Organisering:").pack(anchor="w",pady=(10,2))
         self.organization=tk.StringVar(value="Én fil per tank – felles mappe")
         self.organization_box=ttk.Combobox(
@@ -590,9 +716,9 @@ class App:
         f=os.path.abspath(f)
         if Path(f).suffix.lower() not in EXT: return messagebox.showerror(APP,"Velg en videofil.")
         self.video=f; self.path.set(f); stem=Path(f).stem; tank=self.tank.get() if self.tank.get()!="Velg tank…" else "WoT"
-        self.name.set(f"{tank}_{stem}_klipp.mp4")
+        self.name.set("Automatisk tanknavn")
         if not self.user_dir: self.out.set(str(Path(f).parent/"WoT Blitz Klipp"/tank))
-        self.status.set("Video valgt. Velg tank, navn/mappe og trykk START REDIGERING.")
+        self.status.set("Video valgt. Tankene gjenkjennes automatisk når du trykker START REDIGERING.")
         self.msg("Video valgt: "+f)
     def drop_video(self,e):
         for f in self.root.tk.splitlist(e.data):
@@ -615,7 +741,7 @@ class App:
     def tank_changed(self,_=None):
         t=self.tank.get()
         if self.video:
-            stem=Path(self.video).stem; self.name.set(f"{t}_{stem}_klipp.mp4")
+            self.name.set("Automatisk tanknavn")
             if not self.user_dir:self.out.set(str(Path(self.video).parent/"WoT Blitz Klipp"/t))
         self.status.set("Tank valgt. Ingenting starter før START REDIGERING.")
     def choose_dir(self):
@@ -624,8 +750,8 @@ class App:
     def start_edit(self):
         if self.running:return
         if not self.video:return messagebox.showwarning(APP,"Velg eller dra inn en video først.")
-        if self.tank.get()=="Velg tank…":return messagebox.showwarning(APP,"Velg tank.")
-        if not self.name.get().strip():return messagebox.showwarning(APP,"Skriv inn filnavn.")
+        # Tank is selected automatically from the recording; the dropdown is kept only for compatibility with the existing layout.
+
         if not self.out.get().strip():return messagebox.showwarning(APP,"Velg lagringsmappe.")
         self.running=True; self.start.configure(state="disabled"); self.bar["value"]=0
         threading.Thread(target=self.process,daemon=True).start()
@@ -642,18 +768,34 @@ class App:
             if not segs: raise RuntimeError("Fant ingen sikre kamper med «Battle starts in».")
 
             out=Path(self.out.get()).expanduser()
-            tank_name=self.tank.get() if self.tank.get()!="Velg tank…" else "Ukjent_tank"
-            if self.organization.get()=="Én fil per tank – undermapper":
-                out=out/tank_name
             out.mkdir(parents=True,exist_ok=True)
-            base=Path(self.name.get()).name
-            if Path(base).suffix.lower()!=".mp4": base+=".mp4"
-            dst=out/f"{tank_name}_{Path(base).stem}.mp4"
 
-            # Keep Build 39's detected cut points unchanged. Use hardware H.264
-            # when available; retry with the known x264 settings if it fails.
-            video_encoder = choose_video_encoder(ff)
-            self.msg("Valgt videokoder: " + " ".join(video_encoder))
+            # Tank OCR is a separate pass. detect_battles() and its cut points
+            # are deliberately left unchanged.
+            tank_names=[x["name"] for x in TANK_DATA]
+            assignments=[]
+            for i,(a,b) in enumerate(segs,1):
+                self.set_status(f"Gjenkjenner tank {i}/{len(segs)}…")
+                # Try the pre-battle garage carousel first, then a few earlier
+                # samples in case the last screen before battle is a queue screen.
+                probes=[max(0.0,a-4.0),max(0.0,a-8.0),max(0.0,a-12.0),max(0.0,a-18.0)]
+                found=None
+                for probe in probes:
+                    name,score=recognize_tank_near_time(self.video,probe+4.0,tank_names)
+                    if name:
+                        found=name
+                        self.msg(f"Kamp {i}: OCR fant {name} (score {score:.0f}, prøve {probe:.1f}s).")
+                        break
+                if not found:
+                    found="Ukjent tank"
+                    self.msg(f"Kamp {i}: tanknavn kunne ikke leses sikkert; legges i «Ukjent tank».")
+                assignments.append((found,a,b,i))
+
+            groups={}
+            for tank_name,a,b,index in assignments:
+                groups.setdefault(tank_name,[]).append((a,b,index))
+            video_encoder=choose_video_encoder(ff)
+            self.msg("Valgt videokoder: "+" ".join(video_encoder))
             def encode_segment(a,b,target):
                 def run_encode(encoder):
                     cmd=[ff,"-y","-ss",f"{a:.3f}","-i",self.video,"-t",f"{b-a:.3f}",
@@ -662,49 +804,53 @@ class App:
                          "-movflags","+faststart",str(target)]
                     return subprocess.run(cmd,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
                 result=run_encode(video_encoder)
-                if result.returncode and video_encoder[1]!="libx264":
+                if result.returncode and "-c:v" in video_encoder and "libx264" not in video_encoder:
                     self.msg("Maskinvarekoding feilet; prøver programvarekoding.")
                     result=run_encode(["-c:v","libx264","-preset","superfast","-crf","18"])
                 if result.returncode:
-                    raise RuntimeError("FFmpeg feilet under presis klipping:\\n"+result.stderr[-1600:])
+                    raise RuntimeError("FFmpeg feilet under klipping:\\n"+result.stderr[-1600:])
 
-            if len(segs)==1:
-                a,b=segs[0]
-                self.set_status("Klipper kamp 1/1…"); self.msg(f"Kamp 1: {a:.2f}s → {b:.2f}s")
-                encode_segment(a,b,dst)
-            else:
-                temp_dir=Path(tempfile.mkdtemp(prefix="wot_autoclip_"))
+            temp_dir=Path(tempfile.mkdtemp(prefix="wot_autoclip_"))
+            total_parts=sum(len(items) for items in groups.values())
+            done_parts=0
+            outputs=[]
+            for tank_name,items in groups.items():
+                safe_name=re.sub(r'[<>:"/\\\\|?*]+',"_",tank_name).strip(" .") or "Ukjent tank"
+                if self.organization.get()=="Én fil per tank – undermapper":
+                    tank_out=out/safe_name
+                else:
+                    tank_out=out
+                tank_out.mkdir(parents=True,exist_ok=True)
                 parts=[]
-                encode_started = time.perf_counter()
-                for i,(a,b) in enumerate(segs,1):
-                    clip_started = time.perf_counter()
-                    self.set_status(f"Klipper kamp {i}/{len(segs)}…")
-                    self.msg(f"Kamp {i}: {a:.2f}s → {b:.2f}s")
-                    part=temp_dir/f"part_{i:02d}.mp4"
+                for a,b,index in items:
+                    done_parts+=1
+                    self.set_status(f"Klipper kamp {done_parts}/{total_parts} – {tank_name}…")
+                    self.msg(f"Kamp {index} ({tank_name}): {a:.2f}s → {b:.2f}s")
+                    part=temp_dir/f"part_{index:03d}.mp4"
                     encode_segment(a,b,part)
-                    self.msg(f"Kamp {i} ferdig kodet på {(time.perf_counter()-clip_started)/60:.1f} min.")
                     parts.append(part)
-                    self.set_progress(70+20*i/len(segs))
-
-                self.msg(f"Samlet klippetid/koding: {(time.perf_counter()-encode_started)/60:.1f} min.")
-                concat_list=temp_dir/"concat.txt"
+                    self.set_progress(65+25*done_parts/max(1,total_parts))
+                safe_stem=re.sub(r'[<>:"/\\\\|?*]+',"_",Path(self.video).stem).strip(" .")
+                dst=tank_out/f"{safe_name}_{safe_stem}_klipp.mp4"
+                concat_list=temp_dir/f"concat_{len(outputs):03d}.txt"
                 with concat_list.open("w",encoding="utf-8") as f:
                     for part in parts:
-                        safe=str(part).replace("'","'\\''")
-                        f.write(f"file '{safe}'\n")
-
-                self.set_status("Setter kampene sammen til én video…")
-                self.msg(f"Slår sammen {len(parts)} kampklipp.")
-                concat_started = time.perf_counter()
-                cmd=[ff,"-y","-f","concat","-safe","0","-i",str(concat_list),
-                     "-map","0","-c","copy","-movflags","+faststart",str(dst)]
-                r=subprocess.run(cmd,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
-                if r.returncode: raise RuntimeError("FFmpeg kunne ikke sette sammen klippene:\n"+r.stderr[-1600:])
-                self.msg(f"Sammenslåing ferdig på {(time.perf_counter()-concat_started)/60:.1f} min.")
-
+                        safe=str(part).replace("'","'\\\\''")
+                        f.write(f"file '{safe}'\\n")
+                if len(parts)==1:
+                    shutil.copy2(parts[0],dst)
+                else:
+                    self.set_status(f"Slår sammen {len(parts)} kamper for {tank_name}…")
+                    cmd=[ff,"-y","-f","concat","-safe","0","-i",str(concat_list),
+                         "-map","0","-c","copy","-movflags","+faststart",str(dst)]
+                    r=subprocess.run(cmd,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
+                    if r.returncode:
+                        raise RuntimeError("FFmpeg kunne ikke sette sammen klippene:\\n"+r.stderr[-1600:])
+                outputs.append(dst)
+                self.msg(f"Lagret {len(parts)} kamp(er) for {tank_name}: {dst}")
             self.set_progress(100)
             self.msg(f"Total behandlingstid: {(time.perf_counter()-run_started)/60:.1f} min.")
-            self.set_status(f"Ferdig. {len(segs)} kamper samlet i én video.")
+            self.set_status(f"Ferdig. {len(segs)} kamper fordelt på {len(outputs)} tankvideoer.")
             self.msg("FERDIG: "+str(dst))
             self.root.after(0,lambda:messagebox.showinfo(APP,
                 f"Ferdig!\n{len(segs)} kamper samlet i én video.\n\nLagret i:\n{dst}"))
