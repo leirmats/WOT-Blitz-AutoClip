@@ -24,6 +24,14 @@ jobs:
           Expand-Archive -Force build_tools/ffmpeg.zip build_tools/ffmpeg_extract
           $f = Get-ChildItem -Recurse build_tools/ffmpeg_extract -Filter ffmpeg.exe | Select-Object -First 1
           Copy-Item $f.FullName build_tools/ffmpeg.exe
+      - name: Install Tesseract OCR
+        shell: pwsh
+        run: |
+          choco install tesseract --yes --no-progress
+          New-Item -ItemType Directory -Force build_tools/tesseract | Out-Null
+          Copy-Item "C:\Program Files\Tesseract-OCR\tesseract.exe" build_tools/tesseract/tesseract.exe
+          Copy-Item "C:\Program Files\Tesseract-OCR\*.dll" build_tools/tesseract/
+          Copy-Item "C:\Program Files\Tesseract-OCR\tessdata" build_tools/tesseract/ -Recurse
       - name: Build EXE
         run: python -m PyInstaller --noconfirm --clean --onefile --windowed --name WoT_Blitz_AutoClip --collect-all tkinterdnd2 --add-binary "build_tools\ffmpeg.exe;." --add-data "tank_data.json;." app.py
       - name: Package tank database next to EXE
