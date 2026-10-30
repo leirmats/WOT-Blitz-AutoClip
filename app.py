@@ -7,6 +7,19 @@ from tkinterdnd2 import TkinterDnD, DND_FILES
 import cv2
 import numpy as np
 
+
+def _hidden_subprocess_options():
+    """Prevent FFmpeg console windows from appearing on Windows."""
+    if os.name != "nt":
+        return {}
+    startupinfo = subprocess.STARTUPINFO()
+    startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+    startupinfo.wShowWindow = subprocess.SW_HIDE
+    return {
+        "creationflags": getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        "startupinfo": startupinfo,
+    }
+
 APP="WoT Blitz AutoClip"
 
 # In a PyInstaller --onefile build, __file__ points into the temporary
@@ -628,7 +641,7 @@ class App:
                      "-map","0:v:0","-map","0:a?","-c:v","libx264","-preset","superfast",
                      "-crf","18","-pix_fmt","yuv420p","-c:a","aac","-b:a","160k",
                      "-movflags","+faststart",str(target)]
-                r=subprocess.run(cmd,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
+                r=subprocess.run(cmd,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,**_hidden_subprocess_options())
                 if r.returncode:
                     raise RuntimeError("FFmpeg feilet under presis klipping:\n"+r.stderr[-1600:])
 
@@ -662,7 +675,7 @@ class App:
                 concat_started = time.perf_counter()
                 cmd=[ff,"-y","-f","concat","-safe","0","-i",str(concat_list),
                      "-map","0","-c","copy","-movflags","+faststart",str(dst)]
-                r=subprocess.run(cmd,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
+                r=subprocess.run(cmd,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,**_hidden_subprocess_options())
                 if r.returncode: raise RuntimeError("FFmpeg kunne ikke sette sammen klippene:\n"+r.stderr[-1600:])
                 self.msg(f"Sammenslåing ferdig på {(time.perf_counter()-concat_started)/60:.1f} min.")
 
