@@ -322,8 +322,11 @@ def _refine_candidates(path, countdown_candidates, lobby_candidates, fps, frame_
         windows.append({"kind": "start", "candidate": candidate, "first": first, "last": last, "found": None})
     for candidate in lobby_candidates:
         first = max(0, int((candidate - 3.0) * fps))
-        last = min(frame_count - 1, int((candidate + 0.6) * fps))
-        windows.append({"kind": "lobby", "candidate": candidate, "first": first, "last": last, "found": None})
+        # Keep scanning after the first possible match so the lobby signal can
+        # be confirmed as persistent instead of accepting one matching frame.
+        last = min(frame_count - 1, int((candidate + 2.0) * fps))
+        windows.append({"kind": "lobby", "candidate": candidate, "first": first, "last": last,
+                        "found": None, "streak_start": None, "streak_count": 0})
 
     windows.sort(key=lambda w: (w["first"], w["last"]))
     if not windows:
@@ -365,8 +368,22 @@ def _refine_candidates(path, countdown_candidates, lobby_candidates, fps, frame_
                     if lobby_score is None:
                         small = cv2.resize(frame, (960, 540), interpolation=cv2.INTER_AREA)
                         lobby_score = _lobby_score(frame, small=small)
+
+                    # A real lobby button remains visible. Brief orange shapes
+                    # during gameplay must not end a clip, even if one frame
+                    # happens to exceed the visual-match threshold.
                     if lobby_score >= 0.72:
-                        window["found"] = idx / fps
+                        if window["streak_start"] is None:
+                            window["streak_start"] = idx
+                            window["streak_count"] = 1
+                        else:
+                            window["streak_count"] += 1
+                        required_frames = max(8, int(round(0.8 * fps)))
+                        if window["streak_count"] >= required_frames:
+                            window["found"] = window["streak_start"] / fps
+                    else:
+                        window["streak_start"] = None
+                        window["streak_count"] = 0
 
     cap.release()
     starts = [w["found"] for w in windows if w["kind"] == "start" and w["found"] is not None]
