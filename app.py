@@ -579,14 +579,19 @@ class App:
         self._load_tank_preferences()
         ttk.Label(p,text="Tank:").pack(anchor="w",pady=(8,2))
         self.tank=tk.StringVar(value="")
-        tank_row=ttk.Frame(p); tank_row.pack(fill="x")
-        self.tanks=ttk.Combobox(tank_row,textvariable=self.tank,values=TANKS,state="normal")
-        self.tanks.pack(side="left",fill="x",expand=True)
-        self.favorite_button=ttk.Button(tank_row,text="☆ Favoritt",command=self.toggle_favorite,state="disabled")
+        self.tank_search=tk.StringVar(value="")
+        search_row=ttk.Frame(p); search_row.pack(fill="x")
+        ttk.Entry(search_row,textvariable=self.tank_search).pack(side="left",fill="x",expand=True)
+        self.favorite_button=ttk.Button(search_row,text="☆ Favoritt",command=self.toggle_favorite,state="disabled")
         self.favorite_button.pack(side="left",padx=(8,0))
-        self.tanks.bind("<<ComboboxSelected>>",self.tank_selected)
-        self.tanks.bind("<KeyRelease>",self.tank_search_changed)
-        self.tanks.bind("<FocusIn>",self.refresh_tank_suggestions)
+        self.tank_search.trace_add("write",self.tank_search_changed)
+        list_row=ttk.Frame(p); list_row.pack(fill="x",pady=(3,0))
+        self.tanks=tk.Listbox(list_row,height=6,exportselection=False,selectmode="browse")
+        tank_scroll=ttk.Scrollbar(list_row,orient="vertical",command=self.tanks.yview)
+        self.tanks.configure(yscrollcommand=tank_scroll.set)
+        self.tanks.pack(side="left",fill="both",expand=True)
+        tank_scroll.pack(side="right",fill="y")
+        self.tanks.bind("<<ListboxSelect>>",self.tank_selected)
         self.refresh_tank_suggestions()
 
         ttk.Label(p,text="Nytt filnavn:").pack(anchor="w",pady=(10,2))
@@ -651,38 +656,44 @@ class App:
     def refresh_tank_suggestions(self, _=None):
         if not hasattr(self, "tanks"):
             return
-        query = self._normalize_tank_search(self.tank.get())
+        query = self._normalize_tank_search(self.tank_search.get())
         options = self._tank_options()
         if query:
             options = [name for name in options if query in self._normalize_tank_search(name)]
         favorite_matches = [x for x in self.favorites if x in options]
         recent_matches = [x for x in self.recent_tanks if x in options and x not in favorite_matches]
         ordered = favorite_matches + recent_matches + [x for x in options if x not in favorite_matches and x not in recent_matches]
-        self.tanks.configure(values=ordered if ordered else ["Ingen treff"])
-        if hasattr(self, "favorite_button"):
-            selected = self.tank.get()
-            is_valid = selected in TANK_TIERS
-            self.favorite_button.configure(
-                state="normal" if is_valid else "disabled",
-                text=("★ Favoritt" if selected in self.favorites else "☆ Favoritt")
-            )
+        self.tanks.delete(0, "end")
+        for name in ordered:
+            self.tanks.insert("end", name)
+        if not ordered:
+            self.tanks.insert("end", "Ingen treff")
+        if self.tank.get() in ordered:
+            index = ordered.index(self.tank.get())
+            self.tanks.selection_clear(0, "end")
+            self.tanks.selection_set(index)
+            self.tanks.see(index)
+        selected = self.tank.get()
+        is_valid = selected in TANK_TIERS
+        self.favorite_button.configure(
+            state="normal" if is_valid else "disabled",
+            text=("★ Favoritt" if selected in self.favorites else "☆ Favoritt")
+        )
 
-    def tank_search_changed(self, event=None):
-        if event and event.keysym in ("Up", "Down", "Left", "Right", "Return", "Escape", "Tab", "Shift_L", "Shift_R"):
-            return
+    def tank_search_changed(self, *_):
         self.refresh_tank_suggestions()
-        if self.tank.get() and self.tanks.cget("values") and self.tanks.cget("values")[0] != "Ingen treff":
-            try:
-                self.tanks.tk.call("ttk::combobox::Post", self.tanks)
-            except tk.TclError:
-                pass
 
     def tank_selected(self, _=None):
-        selected = self.tank.get()
-        if selected in TANK_TIERS:
-            self.recent_tanks = [selected] + [x for x in self.recent_tanks if x != selected]
-            self.recent_tanks = self.recent_tanks[:10]
-            self._save_tank_preferences()
+        selection = self.tanks.curselection()
+        if not selection:
+            return
+        selected = self.tanks.get(selection[0])
+        if selected not in TANK_TIERS:
+            return
+        self.tank.set(selected)
+        self.recent_tanks = [selected] + [x for x in self.recent_tanks if x != selected]
+        self.recent_tanks = self.recent_tanks[:10]
+        self._save_tank_preferences()
         self.tank_changed()
 
     def toggle_favorite(self):
@@ -711,6 +722,7 @@ class App:
             if not self.user_dir:self.out.set(str(Path(self.video).parent/"WoT Blitz Klipp"/t))
         self.refresh_tank_suggestions()
         self.status.set("Tank valgt. Ingenting starter før START REDIGERING.")
+
     def choose_dir(self):
         d=filedialog.askdirectory()
         if d:self.user_dir=True; self.out.set(os.path.abspath(d))
