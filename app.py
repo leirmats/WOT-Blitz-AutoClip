@@ -61,7 +61,7 @@ TANKS_BY_TYPE = {
     "Tank Destroyer": ["Velg tank…"] + [x["name"] for x in sorted(TANK_DATA, key=lambda x: x["name"].casefold()) if x["type"] == "Tank Destroyer"],
 }
 TANK_TIERS = {x["name"]: x.get("tier", "") for x in TANK_DATA}
-EXT={".mp4",".mkv",".avi",".mov",".webm",".ts",".m4v"}
+TANK_STATE_PATH = Path(os.environ.get("APPDATA", str(Path.home()))) / "WoT Blitz AutoClip" / "tank_picker.json"
 EXT={".mp4",".mkv",".avi",".mov",".webm",".ts",".m4v"}
 
 def find_ffmpeg():
@@ -576,11 +576,18 @@ class App:
         self.type_box.pack(fill="x")
         self.type_box.bind("<<ComboboxSelected>>",self.tank_type_changed)
 
+        self._load_tank_preferences()
         ttk.Label(p,text="Tank:").pack(anchor="w",pady=(8,2))
         self.tank=tk.StringVar(value=TANKS[0])
-        self.tanks=ttk.Combobox(p,textvariable=self.tank,values=TANKS,state="readonly")
-        self.tanks.pack(fill="x")
-        self.tanks.bind("<<ComboboxSelected>>",self.tank_changed)
+        tank_row=ttk.Frame(p); tank_row.pack(fill="x")
+        self.tanks=ttk.Combobox(tank_row,textvariable=self.tank,values=TANKS,state="normal")
+        self.tanks.pack(side="left",fill="x",expand=True)
+        self.favorite_button=ttk.Button(tank_row,text="☆ Favoritt",command=self.toggle_favorite,state="disabled")
+        self.favorite_button.pack(side="left",padx=(8,0))
+        self.tanks.bind("<<ComboboxSelected>>",self.tank_selected)
+        self.tanks.bind("<KeyRelease>",self.tank_search_changed)
+        self.tanks.bind("<FocusIn>",self.refresh_tank_suggestions)
+        self.refresh_tank_suggestions()
 
         ttk.Label(p,text="Nytt filnavn:").pack(anchor="w",pady=(10,2))
         self.name=tk.StringVar(); ttk.Entry(p,textvariable=self.name).pack(fill="x")
@@ -610,22 +617,99 @@ class App:
     def choose_video(self):
         f=filedialog.askopenfilename(filetypes=[("Video","*.mp4 *.mkv *.avi *.mov *.webm *.ts *.m4v"),("Alle filer","*.*")])
         if f:self.set_video(f)
+    def _load_tank_preferences(self):
+        self.favorites = []
+        self.recent_tanks = []
+        try:
+            if TANK_STATE_PATH.exists():
+                with TANK_STATE_PATH.open("r", encoding="utf-8") as f:
+                    data = json.load(f)
+                known = set(TANK_TIERS)
+                self.favorites = [x for x in data.get("favorites", []) if x in known]
+                self.recent_tanks = [x for x in data.get("recent", []) if x in known][:10]
+        except Exception:
+            self.favorites = []
+            self.recent_tanks = []
+
+    def _save_tank_preferences(self):
+        try:
+            TANK_STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
+            with TANK_STATE_PATH.open("w", encoding="utf-8") as f:
+                json.dump({"favorites": self.favorites, "recent": self.recent_tanks}, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            self.msg("Kunne ikke lagre tankfavoritter/-historikk: " + str(e))
+
+    @staticmethod
+    def _normalize_tank_search(value):
+        return "".join(ch for ch in value.casefold() if ch.isalnum())
+
+    def _tank_options(self):
+        tank_type = self.tank_type.get()
+        return [x["name"] for x in TANK_DATA
+                if tank_type == "Alle tanks" or x["type"] == tank_type]
+
+    def refresh_tank_suggestions(self, _=None):
+        if not hasattr(self, "tanks"):
+            return
+        query = self._normalize_tank_search(self.tank.get())
+        options = self._tank_options()
+        if query:
+            options = [name for name in options if query in self._normalize_tank_search(name)]
+        favorite_matches = [x for x in self.favorites if x in options]
+        recent_matches = [x for x in self.recent_tanks if x in options and x not in favorite_matches]
+        ordered = favorite_matches + recent_matches + [x for x in options if x not in favorite_matches and x not in recent_matches]
+        self.tanks.configure(values=ordered if ordered else ["Ingen treff"])
+        if hasattr(self, "favorite_button"):
+            selected = self.tank.get()
+            is_valid = selected in TANK_TIERS
+            self.favorite_button.configure(
+                state="normal" if is_valid else "disabled",
+                text=("★ Favoritt" if selected in self.favorites else "☆ Favoritt")
+            )
+
+    def tank_search_changed(self, event=None):
+        if event and event.keysym in ("Up", "Down", "Left", "Right", "Return", "Escape", "Tab", "Shift_L", "Shift_R"):
+            return
+        self.refresh_tank_suggestions()
+        if self.tank.get() and self.tanks.cget("values") and self.tanks.cget("values")[0] != "Ingen treff":
+            try:
+                self.tanks.tk.call("ttk::combobox::Post", self.tanks)
+            except tk.TclError:
+                pass
+
+    def tank_selected(self, _=None):
+        selected = self.tank.get()
+        if selected in TANK_TIERS:
+            self.recent_tanks = [selected] + [x for x in self.recent_tanks if x != selected]
+            self.recent_tanks = self.recent_tanks[:10]
+            self._save_tank_preferences()
+        self.tank_changed()
+
+    def toggle_favorite(self):
+        selected = self.tank.get()
+        if selected not in TANK_TIERS:
+            return
+        if selected in self.favorites:
+            self.favorites.remove(selected)
+        else:
+            self.favorites.insert(0, selected)
+        self._save_tank_preferences()
+        self.refresh_tank_suggestions()
+
     def tank_type_changed(self,_=None):
         selected = self.tank.get()
-        values = TANKS_BY_TYPE.get(self.tank_type.get(), TANKS)
-        self.tanks.configure(values=values)
-        if selected in values:
-            self.tank.set(selected)
-        else:
-            self.tank.set("Velg tank…")
+        if selected not in self._tank_options():
+            self.tank.set("")
+        self.refresh_tank_suggestions()
         self.tank_changed()
         self.status.set("Tanktype valgt. Ingenting starter før START REDIGERING.")
 
     def tank_changed(self,_=None):
         t=self.tank.get()
-        if self.video:
+        if self.video and t in TANK_TIERS:
             stem=Path(self.video).stem; self.name.set(f"{t}_{stem}_klipp.mp4")
             if not self.user_dir:self.out.set(str(Path(self.video).parent/"WoT Blitz Klipp"/t))
+        self.refresh_tank_suggestions()
         self.status.set("Tank valgt. Ingenting starter før START REDIGERING.")
     def choose_dir(self):
         d=filedialog.askdirectory()
