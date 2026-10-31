@@ -578,7 +578,7 @@ class App:
 
         self._load_tank_preferences()
         ttk.Label(p,text="Tank:").pack(anchor="w",pady=(8,2))
-        self.tank=tk.StringVar(value=TANKS[0])
+        self.tank=tk.StringVar(value="")
         tank_row=ttk.Frame(p); tank_row.pack(fill="x")
         self.tanks=ttk.Combobox(tank_row,textvariable=self.tank,values=TANKS,state="normal")
         self.tanks.pack(side="left",fill="x",expand=True)
@@ -605,7 +605,7 @@ class App:
     def set_video(self,f):
         f=os.path.abspath(f)
         if Path(f).suffix.lower() not in EXT: return messagebox.showerror(APP,"Velg en videofil.")
-        self.video=f; self.path.set(f); stem=Path(f).stem; tank=self.tank.get() if self.tank.get()!="Velg tank…" else "WoT"
+        self.video=f; self.path.set(f); stem=Path(f).stem; tank=self.tank.get() if self.tank.get() in TANK_TIERS else "WoT"
         self.name.set(f"{tank}_{stem}_klipp.mp4")
         if not self.user_dir: self.out.set(str(Path(f).parent/"WoT Blitz Klipp"/tank))
         self.status.set("Video valgt. Velg tank, navn/mappe og trykk START REDIGERING.")
