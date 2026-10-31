@@ -105,11 +105,17 @@ def main():
         if r["name"] == "HWK 30":
             r["name"] = "HWK 12"
 
-    # Fallback for a current tech-tree tank missing from the BlitzHangar index.
-    # Progetto C50 mod. 66 is a Tier IX Heavy tank in WoT Blitz.
-    if not any(r["name"].casefold() == "progetto c50 mod. 66".casefold() for r in records):
-        records.append({"name": "Progetto C50 mod. 66", "tier": "IX", "type": "Heavy"})
-        records.sort(key=lambda x: x["name"].casefold())
+    # Fallbacks for current tech-tree tanks missing from the BlitzHangar index.
+    # Keep these entries in sync with the in-game tank names and classes.
+    fallbacks = [
+        {"name": "Progetto C50 mod. 66", "tier": "IX", "type": "Heavy"},
+        {"name": "SDP 44 Burza", "tier": "VIII", "type": "Tank Destroyer"},
+    ]
+    known_names = {r["name"].casefold() for r in records}
+    for tank in fallbacks:
+        if tank["name"].casefold() not in known_names:
+            records.append(tank)
+    records.sort(key=lambda x: x["name"].casefold())
 
     if len(records) < 590:
         raise RuntimeError(f"Parsed tank database unexpectedly low: {len(records)}")
