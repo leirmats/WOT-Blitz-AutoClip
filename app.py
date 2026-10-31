@@ -717,7 +717,7 @@ class App:
     def start_edit(self):
         if self.running:return
         if not self.video:return messagebox.showwarning(APP,"Velg eller dra inn en video først.")
-        if self.tank.get()=="Velg tank…":return messagebox.showwarning(APP,"Velg tank.")
+        if self.tank.get() not in TANK_TIERS:return messagebox.showwarning(APP,"Velg en tank fra trefflisten.")
         if not self.name.get().strip():return messagebox.showwarning(APP,"Skriv inn filnavn.")
         if not self.out.get().strip():return messagebox.showwarning(APP,"Velg lagringsmappe.")
         self.running=True; self.start.configure(state="disabled"); self.bar["value"]=0
